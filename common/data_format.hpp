@@ -27,20 +27,26 @@ namespace ILLIXR {
 	// Data type that combines the IMU and camera data at a certain timestamp.
 	// If there is only IMU data for a certain timestamp, img0 and img1 will be null
 	// time is the current UNIX time where dataset_time is the time read from the csv
-	typedef struct {
+	struct imu_cam_type : public destructible {
 		time_type time;
 		Eigen::Vector3f angular_v;
 		Eigen::Vector3f linear_a;
 		std::optional<cv::Mat*> img0;
 		std::optional<cv::Mat*> img1;
 		ullong dataset_time;
-	} imu_cam_type;
+	};
 
-	typedef struct {
+	struct pose_type : public destructible {
 		time_type time; 
 		Eigen::Vector3f position;
 		Eigen::Quaternionf orientation;
-	} pose_type;
+		pose_type(time_type time_, Eigen::Vector3f position_, Eigen::Quaternionf orientation_)
+			: time{time_}
+			, position{position_}
+			, orientation{orientation_}
+		{ }
+		pose_type() { }
+	};
 
 	typedef struct {
 		int pixel[1];
