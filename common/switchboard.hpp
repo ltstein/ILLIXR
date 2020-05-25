@@ -119,7 +119,7 @@ namespace ILLIXR {
 	class topic {
 	private:
 
-		const std::string& _m_name;
+		[[maybe_unused]] const std::string& _m_name;
 		const std::type_info& _m_ty;
 		std::atomic<ptr<const destructible> *> _m_latest{nullptr};
 		std::vector<std::function<void(ptr<const destructible>)>> _m_callbacks;
@@ -138,6 +138,8 @@ namespace ILLIXR {
 			: _m_name{name}, _m_ty{ty}, _m_terminate{terminate} {}
 		topic(const topic&) = delete;
 		topic& operator=(const topic&) = delete;
+
+		const std::type_info& ty() { return _m_ty; }
 
 		void process_callbacks() {
 			while (!_m_terminate.load()) {
@@ -171,7 +173,7 @@ namespace ILLIXR {
 		template <typename event>
 		void schedule(std::function<void(ptr<const event>)> callback) {
 			const std::lock_guard<std::mutex> lock{_m_callbacks_lock};
-			_m_callbacks.push_back([&callback, this](ptr<const destructible> this_destructible) {
+			_m_callbacks.push_back([&callback](ptr<const destructible> this_destructible) {
 				ptr<const event> this_event = std::dynamic_pointer_cast<const event>(this_destructible);
 				assert(this_event);
 				callback(this_event);
@@ -260,9 +262,10 @@ namespace ILLIXR {
 				   - Reads _m_topic, which is const.
 				   - Reads _m_topic._m_latest using atomics.
 				*/
-				ptr<const event> ret = std::dynamic_pointer_cast<event>(_m_topic._m_latest.load());
-				assert(ret);
-				return ret;
+				ptr<const destructible> this_destructible = *_m_topic._m_latest.load();
+				ptr<const event> this_event = std::dynamic_pointer_cast<const event>(this_destructible);
+				assert(this_event);
+				return this_event;
 			}
 
 		private:
@@ -288,7 +291,9 @@ namespace ILLIXR {
 		template <typename event> topic& ensure_topic(const std::string& name) {
 			const std::lock_guard<std::mutex> lock{_m_registry_lock};
 			_m_registry.try_emplace(name, name, typeid(event), _m_terminate);
-			return _m_registry.at(name);
+			topic& this_topic = _m_registry.at(name);
+			assert(this_topic.ty() == typeid(event));
+			return this_topic;
 		}
 
 		template <typename event> writer<event> get_writer(const std::string& name) {
@@ -296,9 +301,9 @@ namespace ILLIXR {
 			return writer<event>(this_topic);
 		}
 
-		template <typename event> writer<event> get_reader(const std::string& name) {
+		template <typename event> reader<event> get_reader(const std::string& name) {
 			topic& this_topic = ensure_topic<event>(name);
-			return writer<event>(this_topic);
+			return reader<event>(this_topic);
 		}
 
 		template <typename event> void schedule(const std::string& name, std::function<void(ptr<const event>)> callback) {

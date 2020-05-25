@@ -23,7 +23,7 @@ public:
 		: _m_path(path)
 	{ }
 	std::unique_ptr<cv::Mat> load() const {
-		auto img = std::unique_ptr<cv::Mat>{new cv::Mat{cv::imread(_m_path, cv::IMREAD_COLOR)}};
+		auto img = std::make_unique<cv::Mat>(cv::imread(_m_path, cv::IMREAD_COLOR));
 		/* TODO: make this load in grayscale */
 		assert(!img->empty());
 		cv::cvtColor(*img, *img, cv::COLOR_BGR2GRAY);

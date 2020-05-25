@@ -33,8 +33,7 @@ public:
 			return;
 		}
 
-		pose_type* true_pose = _m_true_pose.allocate();
-		*true_pose = pose_type{datum->time, _m_sensor_data_it->second.position, _m_sensor_data_it->second.orientation};
+		pose_type* true_pose = new (_m_true_pose.allocate()) pose_type {datum->time, _m_sensor_data_it->second.position, _m_sensor_data_it->second.orientation};
 		// std::cout << "The pose was found at " << true_pose->position[0] << ", " << true_pose->position[1] << ", " << true_pose->position[2] << std::endl; 
 
 		_m_true_pose.put(true_pose);
