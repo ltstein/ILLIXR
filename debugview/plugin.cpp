@@ -60,7 +60,7 @@ public:
 		: sb{pb->lookup_impl<switchboard>()}
 		, pp{pb->lookup_impl<pose_prediction>()}
 
-		, _m_slow_pose{sb->subscribe_latest<pose_type>("slow_pose")}
+		, _m_slow_pose{sb->get_reader<pose_type>("slow_pose")}
 		//, glfw_context{pb->lookup_impl<global_config>()->glfw_context}
 	{}
 
@@ -107,10 +107,11 @@ public:
 		}
 	};
 
-	void imu_cam_handler(const imu_cam_type *datum) {
-		if(datum == NULL){ return; }
-		if(datum->img0.has_value() && datum->img1.has_value())
+	void imu_cam_handler(ptr<const imu_cam_type> datum) {
+		assert(datum);
+		if(datum->img0 && datum->img1) {
 			last_datum_with_images = datum;
+		}
 	}
 
 	void draw_GUI() {
@@ -145,13 +146,13 @@ public:
 			ImGui::Text("Resets to zero'd out tracking universe");
 		}
 		ImGui::Spacing();
-		const pose_type* fast_pose_ptr = pp->get_fast_pose();
-		const pose_type* slow_pose_ptr = _m_slow_pose->get_latest_ro();
-		const pose_type* true_pose_ptr = pp->get_fast_true_pose();
 		ImGui::Text("Switchboard connection status:");
 		ImGui::Text("Fast pose topic:");
 		ImGui::SameLine();
-		if(fast_pose_ptr){
+		std::optional<const pose_type> fast_pose_ptr = pp->get_fast_pose();
+		ptr<const pose_type> slow_pose_ptr = _m_slow_pose.get_latest_ro_nullable();
+		std::optional<const pose_type> true_pose_ptr = pp->get_fast_true_pose();
+		if (fast_pose_ptr) {
 			ImGui::TextColored(ImVec4(0.0, 1.0, 0.0, 1.0), "Valid fast pose pointer");
 			ImGui::Text("Fast pose position (XYZ):\n  (%f, %f, %f)", fast_pose_ptr->position.x(), fast_pose_ptr->position.y(), fast_pose_ptr->position.z());
 			ImGui::Text("Fast pose quaternion (XYZW):\n  (%f, %f, %f, %f)", fast_pose_ptr->orientation.x(), fast_pose_ptr->orientation.y(), fast_pose_ptr->orientation.z(), fast_pose_ptr->orientation.w());
@@ -160,7 +161,7 @@ public:
 		}
 		ImGui::Text("Slow pose topic:");
 		ImGui::SameLine();
-		if(slow_pose_ptr){
+		if(slow_pose_ptr) {
 			ImGui::TextColored(ImVec4(0.0, 1.0, 0.0, 1.0), "Valid slow pose pointer");
 			ImGui::Text("Slow pose position (XYZ):\n  (%f, %f, %f)", slow_pose_ptr->position.x(), slow_pose_ptr->position.y(), slow_pose_ptr->position.z());
 			ImGui::Text("Slow pose quaternion (XYZW):\n  (%f, %f, %f, %f)", slow_pose_ptr->orientation.x(), slow_pose_ptr->orientation.y(), slow_pose_ptr->orientation.z(), slow_pose_ptr->orientation.w());
@@ -169,7 +170,7 @@ public:
 		}
 		ImGui::Text("GROUND TRUTH pose topic:");
 		ImGui::SameLine();
-		if(true_pose_ptr){
+		if (true_pose_ptr) {
 			ImGui::TextColored(ImVec4(0.0, 1.0, 0.0, 1.0), "Valid ground truth pose pointer");
 			ImGui::Text("Ground truth position (XYZ):\n  (%f, %f, %f)", true_pose_ptr->position.x(), true_pose_ptr->position.y(), true_pose_ptr->position.z());
 			ImGui::Text("Ground truth quaternion (XYZW):\n  (%f, %f, %f, %f)", true_pose_ptr->orientation.x(), true_pose_ptr->orientation.y(), true_pose_ptr->orientation.z(), true_pose_ptr->orientation.w());
@@ -186,10 +187,11 @@ public:
 		ImGui::Text("Camera view buffers: ");
 		ImGui::Text("	Camera0: (%d, %d) \n		GL texture handle: %d", camera_texture_sizes[0].x(), camera_texture_sizes[0].y(), camera_textures[0]);
 		ImGui::Text("	Camera1: (%d, %d) \n		GL texture handle: %d", camera_texture_sizes[1].x(), camera_texture_sizes[1].y(), camera_textures[1]);
-		if(ImGui::Button("Calculate new orientation offset")){
-			const pose_type* pose_ptr = pp->get_fast_pose();
-			if(pose_ptr != NULL)
-				offsetQuat = Eigen::Quaternionf(pose_ptr->orientation);
+		if (ImGui::Button("Calculate new orientation offset")){
+			std::optional<pose_type> fast_pose_ptr = pp->get_fast_pose();
+			if (fast_pose_ptr) {
+				offsetQuat = Eigen::Quaternionf(fast_pose_ptr->orientation);
+			}
 		}
 		ImGui::End();
 
@@ -219,13 +221,13 @@ public:
 	}
 
 	bool load_camera_images(){
-		if(last_datum_with_images == NULL){
+		if (!last_datum_with_images){
 			return false;
 		}
-		if(last_datum_with_images->img0.has_value()){
+		if (last_datum_with_images->img0) {
 			glBindTexture(GL_TEXTURE_2D, camera_textures[0]);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, (*last_datum_with_images->img0.value()).cols, (*last_datum_with_images->img0.value()).rows, 0, GL_RED, GL_UNSIGNED_BYTE, (*last_datum_with_images->img0.value()).ptr());
-			camera_texture_sizes[0] = Eigen::Vector2i((*last_datum_with_images->img0.value()).cols, (*last_datum_with_images->img0.value()).rows);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, last_datum_with_images->img0->cols, last_datum_with_images->img0->rows, 0, GL_RED, GL_UNSIGNED_BYTE, last_datum_with_images->img0->ptr());
+			camera_texture_sizes[0] = Eigen::Vector2i(last_datum_with_images->img0->cols, last_datum_with_images->img0->rows);
 			GLint swizzleMask[] = {GL_RED, GL_RED, GL_RED, GL_RED};
 			glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
 		} else {
@@ -236,10 +238,10 @@ public:
 			camera_texture_sizes[0] = Eigen::Vector2i(TEST_PATTERN_WIDTH, TEST_PATTERN_HEIGHT);
 		}
 		
-		if(last_datum_with_images->img1.has_value()){
+		if(last_datum_with_images->img1) {
 			glBindTexture(GL_TEXTURE_2D, camera_textures[1]);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, (*last_datum_with_images->img1.value()).cols, (*last_datum_with_images->img1.value()).rows, 0, GL_RED, GL_UNSIGNED_BYTE, (*last_datum_with_images->img1.value()).ptr());
-			camera_texture_sizes[1] = Eigen::Vector2i((*last_datum_with_images->img1.value()).cols, (*last_datum_with_images->img1.value()).rows);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, last_datum_with_images->img1->cols, last_datum_with_images->img1->rows, 0, GL_RED, GL_UNSIGNED_BYTE, last_datum_with_images->img1->ptr());
+			camera_texture_sizes[1] = Eigen::Vector2i(last_datum_with_images->img1->cols, last_datum_with_images->img1->rows);
 			GLint swizzleMask[] = {GL_RED, GL_RED, GL_RED, GL_RED};
 			glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
 		} else {
@@ -307,14 +309,11 @@ public:
 
 			glUseProgram(demoShaderProgram);
 
-			const pose_type* pose_ptr = pp->get_fast_pose();
-
 			Eigen::Matrix4f headsetPose = Eigen::Matrix4f::Identity();
 			Eigen::Matrix4f headsetPosition = Eigen::Matrix4f::Identity();
 
-			
-
-			if(pose_ptr){
+			std::optional<pose_type> pose_ptr = pp->get_fast_pose();
+			if(pose_ptr) {
 				// We have a valid pose from our Switchboard plug.
 
 				if(counter == 100){
@@ -371,7 +370,7 @@ public:
 			headsetObject.color = {0.2,0.2,0.2,1};
 			headsetObject.drawMe();
 
-			const pose_type* groundtruth_pose_ptr = pp->get_fast_true_pose();
+			std::optional<pose_type> groundtruth_pose_ptr = pp->get_fast_true_pose();
 			if(groundtruth_pose_ptr){
 				headsetPose = generateHeadsetTransform(groundtruth_pose_ptr->position, groundtruth_pose_ptr->orientation, tracking_position_offset);
 			}
@@ -397,8 +396,8 @@ private:
 	switchboard* sb;
 	pose_prediction* pp;
 
-	std::unique_ptr<reader_latest<pose_type>> _m_slow_pose;
-	// std::unique_ptr<reader_latest<imu_cam_type>> _m_imu_cam_data;
+	switchboard::reader<pose_type> _m_slow_pose;
+	// switchboard::reader<imu_cam_type> _m_imu_cam_data;
 	GLFWwindow* gui_window;
 
 	uint8_t test_pattern[TEST_PATTERN_WIDTH][TEST_PATTERN_HEIGHT];
@@ -421,7 +420,7 @@ private:
 	Eigen::Vector3f tracking_position_offset = Eigen::Vector3f{5.0f, 2.0f, -3.0f};
 
 
-	const imu_cam_type* last_datum_with_images = NULL;
+	ptr<const imu_cam_type> last_datum_with_images {nullptr};
 	// std::vector<std::optional<cv::Mat>> camera_data = {std::nullopt, std::nullopt};
 	GLuint camera_textures[2];
 	Eigen::Vector2i camera_texture_sizes[2] = {Eigen::Vector2i::Zero(), Eigen::Vector2i::Zero()};
@@ -482,9 +481,7 @@ public:
 		// It serves more as an event stream. Camera frames are only available on this topic
 		// the very split second they are made available. Subsequently published packets to this
 		// topic do not contain the camera frames.
-   		sb->schedule<imu_cam_type>("imu_cam", [&](const imu_cam_type *datum) {
-        	this->imu_cam_handler(datum);
-    	});
+   		sb->schedule<imu_cam_type>("imu_cam", std::bind(&debugview::imu_cam_handler, this, std::placeholders::_1));
 
 		glfwWindowHint(GLFW_VISIBLE, GL_TRUE);
 		const char* glsl_version = "#version 430 core";

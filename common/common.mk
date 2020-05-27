@@ -5,7 +5,8 @@ STDCXX ?= c++17
 DBG_FLAGS ?= -Og -g
 OPT_FLAGS ?= -O3 -DNDEBUG
 CPP_FILES ?= $(shell find . -name '*.cpp' -not -name 'plugin.cpp' -not -name 'main.cpp')
-HPP_FILES ?= $(shell find . -name '*.hpp')
+HPP_FILES ?= $(shell find -L . -name '*.hpp')
+# I need -L to follow symlinks in common/
 
 # In the future, if compilation is slow, we can enable partial compilation of object files with
 #  $(OBJ_FILES:.o=.dbg.o) and  $(OBJ_FILES:.o=.opt.o)

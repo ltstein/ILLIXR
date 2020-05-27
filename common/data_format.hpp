@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <chrono>
+#include <array>
 #include <memory>
 #include <boost/optional.hpp>
 
@@ -27,7 +28,7 @@ namespace ILLIXR {
 	// Data type that combines the IMU and camera data at a certain timestamp.
 	// If there is only IMU data for a certain timestamp, img0 and img1 will be null
 	// time is the current UNIX time where dataset_time is the time read from the csv
-	struct imu_cam_type : public destructible {
+	struct imu_cam_type : public switchboard::event {
 		time_type time;
 		Eigen::Vector3f angular_v;
 		Eigen::Vector3f linear_a;
@@ -53,7 +54,7 @@ namespace ILLIXR {
 		}
 	};
 
-	struct pose_type : public destructible {
+	struct pose_type : public switchboard::event {
 		time_type time; 
 		Eigen::Vector3f position;
 		Eigen::Quaternionf orientation;
@@ -69,7 +70,7 @@ namespace ILLIXR {
 		int pixel[1];
 	} camera_frame;
 
-	class global_config : public service {
+	class global_config : public phonebook::service {
 	public:
 		global_config(GLFWwindow* _glfw_context) : glfw_context(_glfw_context) { }
 		GLFWwindow* glfw_context;
@@ -77,25 +78,36 @@ namespace ILLIXR {
 
 	// Single-texture format; arrayed by left/right eye
 	// Single-texture format; arrayed by left/right eye
-	struct rendered_frame {
+	struct rendered_frame : public switchboard::event {
 		GLuint texture_handle;
 		pose_type render_pose; // The pose used when rendering this frame.
-		std::chrono::time_point<std::chrono::system_clock> sample_time; 
+		rendered_frame() {}
+		rendered_frame(GLuint texture_handle_, pose_type render_pose_)
+			: texture_handle{texture_handle_}
+			, render_pose{render_pose_}
+		{ }
 	};
 
 	// Using arrays as a swapchain
 	// Array of left eyes, array of right eyes
 	// This more closely matches the format used by Monado
-	struct rendered_frame_alt {
-		GLuint texture_handles[2]; // Does not change between swaps in swapchain
-		GLuint swap_indices[2]; // Which element of the swapchain
+	struct rendered_frame_alt : public switchboard::event {
+		std::array<GLuint, 2> texture_handles; // Does not change between swaps in swapchain
+		std::array<GLuint, 2> swap_indices; // Which element of the swapchain
 		pose_type render_pose; // The pose used when rendering this frame.
-		std::chrono::time_point<std::chrono::system_clock> sample_time; 
+		rendered_frame_alt() {}
+		rendered_frame_alt(std::array<GLuint, 2> texture_handles_, std::array<GLuint, 2> swap_indices_, pose_type render_pose_)
+			: texture_handles{texture_handles_}
+			, swap_indices(swap_indices_)
+			, render_pose{render_pose_}
+		{ }
 	};
 
-	typedef struct {
+	struct hologram_input : public switchboard::event {
 		int seq;
-	} hologram_input;
+		hologram_input() { }
+		hologram_input(int seq_) : seq{seq_} { }
+	};
 
 	typedef struct {
 		int dummy;

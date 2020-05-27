@@ -20,11 +20,11 @@ public:
 	{}
 
 	virtual void start() override {
-		sb->schedule<imu_cam_type>("imu_cam", std::bind(&ground_truth_slam::feed_ground_truth, *this, std::placeholders::_1));
+		sb->schedule<imu_cam_type>("imu_cam", std::bind(&ground_truth_slam::feed_ground_truth, this, std::placeholders::_1));
 	}
 
-
 	void feed_ground_truth(ptr<const imu_cam_type> datum) {
+		std::cerr << "ground_truth_slam::feed_ground_truth " << datum.get() << std::endl;
 		ullong rounded_time = floor(datum->dataset_time / 10000);
 		_m_sensor_data_it = _m_sensor_data.find(rounded_time);
 

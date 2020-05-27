@@ -36,11 +36,11 @@ public:
 		, xwin{pb->lookup_impl<xlib_gl_extended_window>()}
 		, pp{pb->lookup_impl<pose_prediction>()}
 	#ifdef USE_ALT_EYE_FORMAT
-		, _m_eyebuffer{sb->subscribe_latest<rendered_frame_alt>("eyebuffer")}
+		, _m_eyebuffer{sb->get_reader<rendered_frame_alt>("eyebuffer")}
 	#else
-		, _m_eyebuffer{sb->subscribe_latest<rendered_frame>("eyebuffer")}
+		, _m_eyebuffer{sb->get_reader<rendered_frame>("eyebuffer")}
 	#endif
-		, _m_hologram{sb->publish<hologram_input>("hologram_in")}
+		, _m_hologram{sb->get_writer<hologram_input>("hologram_in")}
 	{ }
 
 private:
@@ -61,13 +61,13 @@ private:
 
 	// Switchboard plug for application eye buffer.
 	#ifdef USE_ALT_EYE_FORMAT
-	std::unique_ptr<reader_latest<rendered_frame_alt>> _m_eyebuffer;
+	switchboard::reader<rendered_frame_alt> _m_eyebuffer;
 	#else
-	std::unique_ptr<reader_latest<rendered_frame>> _m_eyebuffer;
+	switchboard::reader<rendered_frame> _m_eyebuffer;
 	#endif
 
 	// Switchboard plug for sending hologram calls
-	std::unique_ptr<writer<hologram_input>> _m_hologram;
+	switchboard::writer<hologram_input> _m_hologram;
 
 	GLuint timewarpShaderProgram;
 	GLuint basicShaderProgram;
@@ -423,7 +423,7 @@ public:
 	virtual void warp(float time) {
 		glXMakeCurrent(xwin->dpy, xwin->win, xwin->glc);
 
-		auto most_recent_frame = _m_eyebuffer->get_latest_ro();
+		auto most_recent_frame = _m_eyebuffer.get_latest_ro();
 		if(!most_recent_frame){
 			//std::cerr << "ATW failed to grab most recent frame from Switchboard" << std::endl;
 			return;
@@ -461,8 +461,10 @@ public:
 		// TODO: Right now, this samples the latest pose published to the "pose" topic.
 		// However, this should really be polling the high-frequency pose prediction topic,
 		// given a specified timestamp!
-		auto latest_pose = pp->get_fast_pose();
-		GetViewMatrixFromPose(&viewMatrixBegin, *latest_pose);
+		std::optional<pose_type> latest_pose = pp->get_fast_pose();
+		if (latest_pose) {
+			GetViewMatrixFromPose(&viewMatrixBegin, *latest_pose);
+		}
 
 		// std::cout << "Timewarp: old " << most_recent_frame->render_pose.pose << ", new " << latest_pose->pose << std::endl;
 
@@ -568,9 +570,8 @@ public:
 		}
 
 		// Call Hologram
-		auto hologram_params = new hologram_input;
-		hologram_params->seq = ++_hologram_seq;
-		_m_hologram->put(hologram_params);
+		hologram_input* hologram_params = new (_m_hologram.allocate()) hologram_input{static_cast<int>(++_hologram_seq)};
+		_m_hologram.put(hologram_params);
 
 		// Call swap buffers; when vsync is enabled, this will return to the CPU thread once the buffers have been successfully swapped.
 		// TODO: GLX V SYNCH SWAP BUFFER

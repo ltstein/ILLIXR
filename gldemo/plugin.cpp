@@ -46,9 +46,9 @@ public:
 		//, xwin{pb->lookup_impl<xlib_gl_extended_window>()}
 		, pp{pb->lookup_impl<pose_prediction>()}
 #ifdef USE_ALT_EYE_FORMAT
-		, _m_eyebuffer{sb->publish<rendered_frame_alt>("eyebuffer")}
+		, _m_eyebuffer{sb->get_writer<rendered_frame_alt>("eyebuffer")}
 #else
-		, _m_eyebuffer{sb->publish<rendered_frame>("eyebuffer")}
+		, _m_eyebuffer{sb->get_writer<rendered_frame>("eyebuffer")}
 #endif
 	{ 
 		// Well, the gldemo somehow needs a separate window/ctx
@@ -127,9 +127,9 @@ public:
 			glBindFramebuffer(GL_FRAMEBUFFER, eyeTextureFBO);
 
 			// Determine which set of eye textures to be using.
-			int buffer_to_use = which_buffer.load();
+			unsigned int buffer_to_use = which_buffer.load();
 
-			const pose_type* pose_ptr = pp->get_fast_pose();
+			std::optional<pose_type> pose_ptr = pp->get_fast_pose();
 
 			// We'll calculate this model view matrix
 			// using fresh pose data, if we have any.
@@ -142,7 +142,7 @@ public:
 			ksAlgebra::ksMatrix4x4f offsetRotation;
 
 
-			if(pose_ptr){
+			if(pose_ptr) {
 				// We have a valid pose from our Switchboard plug.
 
 				if(counter == 50){
@@ -255,27 +255,17 @@ public:
 			glFlush();
 
 			// Publish our submitted frame handle to Switchboard!
-			#ifdef USE_ALT_EYE_FORMAT
-			auto frame = new rendered_frame_alt;
-			frame->texture_handles[0] = eyeTextures[0];
-			frame->texture_handles[1] = eyeTextures[1];
-			frame->swap_indices[0] = buffer_to_use;
-			frame->swap_indices[1] = buffer_to_use;
-			auto pose = pp->get_fast_pose();
-			frame->render_pose = *pose;
-			assert(pose);
+			std::optional<pose_type> pose = pp->get_fast_pose();
 			which_buffer.store(buffer_to_use == 1 ? 0 : 1);
-			#else
-			auto frame = new rendered_frame;
-			frame->texture_handle = eyeTextures[buffer_to_use];
-			
-			auto pose = pp->get_fast_pose();
-			frame->render_pose = *pose;
-			assert(pose);
-			which_buffer.store(buffer_to_use == 1 ? 0 : 1);
-			#endif
+			rendered_frame_alt* frame = new (_m_eyebuffer.allocate()) rendered_frame_alt {
+#ifdef USE_ALT_EYE_FORMAT
+				eyeTextures, {buffer_to_use, buffer_to_use}, *pose
+#else
+				eyeTextures[buffer_to_use], *pose
+#endif
+			};
 
-			_m_eyebuffer->put(frame);
+			_m_eyebuffer.put(frame);
 			
 		}
 		
@@ -293,9 +283,9 @@ private:
 	// we're just atomically writing the handle to the
 	// correct eye/framebuffer in the "swapchain".
 	#ifdef USE_ALT_EYE_FORMAT
-	std::unique_ptr<writer<rendered_frame_alt>> _m_eyebuffer;
+	switchboard::writer<rendered_frame_alt> _m_eyebuffer;
 	#else
-	std::unique_ptr<writer<rendered_frame>> _m_eyebuffer;
+	switchboard::writer<rendered_frame> _m_eyebuffer;
 	#endif
 
 	GLFWwindow* hidden_window;
@@ -303,14 +293,14 @@ private:
 	uint counter = 0;
 	Eigen::Quaternionf offsetQuat;
 
-	GLuint eyeTextures[2];
+	std::array<GLuint, 2> eyeTextures;
 	GLuint eyeTextureFBO;
 	GLuint eyeTextureDepthTarget;
 
 	// This doesn't really need to be atomic right now,
 	// as it's only used by the "app's" thread, but 
 	// we'll keep it atomic just in case for now!
-	std::atomic<int> which_buffer = 0;
+	std::atomic<unsigned int> which_buffer = 0;
 
 
 	GLuint demo_vao;
