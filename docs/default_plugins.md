@@ -7,8 +7,7 @@
   (uses timing from `offline_imu_cam`).
 
 - [`open_vins`][7]: Runs OpenVINS ([upstream][1]) on the input, and outputs a the headset's pose. In practice, this
-  publishes a fairly slow pose, so pose prediction is required to infer a fast pose. We do not yet
-  have pose prediction, so we say `open_vins` also publishes a fast pose.
+  publishes a fairly slow pose, so pose prediction is required to infer a fast pose which is also implemented in OpenVINS
 
 - [`gldemo`][8]: Renders a static scene (into left and right eyebuffers) given the pose from `open_vins`.
 
