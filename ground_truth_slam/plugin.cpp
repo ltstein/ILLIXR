@@ -24,7 +24,7 @@ public:
 	}
 
 	void feed_ground_truth(ptr<const imu_cam_type> datum) {
-		std::cerr << "ground_truth_slam::feed_ground_truth " << datum.get() << std::endl;
+		// std::cerr << "ground_truth_slam::feed_ground_truth " << datum.get() << std::endl;
 		ullong rounded_time = floor(datum->dataset_time / 10000);
 		_m_sensor_data_it = _m_sensor_data.find(rounded_time);
 

@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <thread>
+#include <chrono>
 #include <unordered_map>
 #include <vector>
 #include <stdexcept>
@@ -115,9 +116,19 @@ namespace ILLIXR {
 			virtual ~event() { }
 		};
 
-static void foo(ptr<const event> datum) {
-	std::cerr << "switchboard: foo " << datum.get() << std::endl;
-}
+		template <typename underlying_type>
+		class event_wrapper : public event {
+		private:
+			underlying_type underlying_data;
+		public:
+			event_wrapper() { }
+			event_wrapper(underlying_type underlying_data_)
+				: underlying_data{underlying_data_}
+			{ }
+			operator underlying_type() const { return underlying_data; }
+			underlying_type& operator*() { return underlying_data; }
+			const underlying_type& operator*() const { return underlying_data; }
+		};
 
 	private:
 	class topic {
@@ -128,9 +139,9 @@ static void foo(ptr<const event> datum) {
 		std::atomic<ptr<const event> *> _m_latest {nullptr};
 		std::vector<std::function<void(ptr<const event>)>> _m_callbacks;
 		std::mutex _m_callbacks_lock;
-		queue<ptr<const event>> _m_queue;
+		queue<ptr<const event>> _m_queue {8 /*max size estimate*/};
 		std::thread _m_thread;
-		const std::atomic<bool> &_m_terminate;
+		std::atomic<bool> _m_terminate {false};
 
 		/* TODO: (optimization) use unique_ptr when there is only one
 		   subscriber. */
@@ -138,10 +149,9 @@ static void foo(ptr<const event> datum) {
 
 
 	public:
-		topic(const std::string& name, const std::type_info& ty, const std::atomic<bool> &terminate)
+		topic(const std::string& name, const std::type_info& ty)
 			: _m_name{name}
 			, _m_ty{ty}
-			, _m_terminate{terminate}
 		{ }
 		topic(const topic&) = delete;
 		topic& operator=(const topic&) = delete;
@@ -153,7 +163,7 @@ static void foo(ptr<const event> datum) {
 				ptr<const event> this_event;
 				if (_m_queue.try_dequeue(this_event)) {
 					const std::lock_guard<std::mutex> lock{_m_callbacks_lock};
-					std::cerr << "switchboard::topic::process_callbacks for " << this_event.get() << std::endl;
+					// std::cerr << "switchboard::topic::process_callbacks for " << this_event.get() << std::endl;
 					for (const std::function<void(ptr<const event>)>& callback : _m_callbacks) {
 						callback(this_event);
 					}
@@ -162,9 +172,22 @@ static void foo(ptr<const event> datum) {
 		}
 
 		~topic() {
+			// std::cerr << "switchboard::topic::~topic" << std::endl;
 			ptr<const event>* ev = _m_latest.exchange(nullptr);
 			delete ev;
 			// corresponds to new in most recent topic::writer::put or topic::topic (if put was never called)
+
+			_m_terminate.store(true);
+			if (_m_thread.joinable()) {
+				// std::cerr << "switchboard::topic::~topic _m_terminate " << _m_terminate.load() << std::endl;
+				_m_thread.join();
+			}
+			// "it is up to the user to ensure that the queue object is completely constructed before being used by any other threads"
+			// - ConcurrentQueue documentation
+
+			// draining the queue is necessary to reduce the ref-counts of the shared_ptrs in the queue, to reclaim memory.
+			ptr<const event> elem;
+			while (_m_queue.try_dequeue(elem)) {}
 		}
 
 		/**
@@ -227,7 +250,7 @@ static void foo(ptr<const event> datum) {
 			 * @p this_specific_event must not be null, and it must not point to null data
 			 *
 			 */
-			void put(specific_event* this_specific_event) {
+			void put(const specific_event* this_specific_event) {
 				/*
 				  Proof of thread-safety:
 				  - Reads _m_topic, which is const.
@@ -248,14 +271,15 @@ static void foo(ptr<const event> datum) {
 				assert(this_specific_event);
 				// this new pairs with the delete below for, except for the last time, which pairs with the delete in topic::~topic
 				ptr<const event>* this_event = new ptr<const event>{this_specific_event};
-				std::cerr << "swithcbord::writer::put: allocated " << this_event << " for " << this_specific_event << std::endl;
+				assert(this_event->use_count() == 1);
+				// std::cerr << "swithcbord::writer::put allocated " << this_event << " for " << this_specific_event << std::endl;
 				ptr<const event>* old_specific_event = _m_topic._m_latest.exchange(this_event);
-				// pairs with the new above or from topic::topic (on the first time)
-				std::cerr << "swithcbord::writer::put: decr ref-count for " << old_specific_event << std::endl;
-				delete old_specific_event;
 
 				assert(_m_topic._m_queue.enqueue(*this_event));
-				assert(this_event->use_count() == 2);
+
+				// pairs with the new above or from topic::topic (on the first time)
+				// std::cerr << "swithcbord::writer::put decr ref-count for " << old_specific_event << std::endl;
+				delete old_specific_event;
 			}
 
 		private:
@@ -271,31 +295,37 @@ static void foo(ptr<const event> datum) {
 			 */
 
 		public:
+			bool valid() {
+				return bool{_m_topic._m_latest.load()};
+			}
+
 			ptr<const specific_event> get_latest_ro_nullable() {
 				/* Proof of thread-safety:
 				   - Reads _m_topic, which is const.
 				   - Reads _m_topic._m_latest using atomics.
+				   - Increments the latest shared pointer before using it.
+				     - Note that this is a const-pointer-to-data, so the pointer cannot be reseated, so there is no data-race on reading its value
+					 - However, there is a data-race (both reader and writer using atomics) on the ref-count.
 				*/
 				ptr<const event>* this_event_ptr = _m_topic._m_latest.load();
 				if (this_event_ptr) {
-					std::cerr << "switchboard::get_latest_ro_nullable: " << this_event_ptr << std::endl;
 					ptr<const event> this_event = *this_event_ptr;
-					std::cerr << "switchboard::get_latest_ro_nullable: " << this_event_ptr << " " << this_event.get() << std::endl;
 					ptr<const specific_event> this_specific_event = std::dynamic_pointer_cast<const specific_event>(this_event);
 					// Check that the dynamic cast succeeded:
-					// if this_event is non-null, then this_specific_event should also be non-null
-					// This assertion is provable from the runtime typechecking I do in switchboard::get_reader/switchboard::get_writer (I hope)
+					// If the original (this_event) is non-null, then the child (this_specific_event) should be non-null
 					assert(!this_event || this_specific_event);
+					// this_event could stlil be null if the write rpushed null
 					return this_specific_event;
 				} else {
-					// no event is pushed yet
+					// std::cerr << "switchboard::get_latest_ro_nullable: no event" << std::endl;
 					return ptr<const specific_event>{nullptr};
 				}
 			}
 
 			ptr<const specific_event> get_latest_ro() {
+				assert(valid());
 				ptr<const specific_event> this_specific_event = get_latest_ro_nullable();
-				assert(this_specific_event);
+				assert(this_specific_event && "Writer pushed null, but reader is not reading nullable");
 				return this_specific_event;
 			}
 
@@ -321,7 +351,7 @@ static void foo(ptr<const event> datum) {
 
 		template <typename specific_event> topic& ensure_topic(const std::string& name) {
 			const std::lock_guard<std::mutex> lock{_m_registry_lock};
-			_m_registry.try_emplace(name, name, typeid(specific_event), _m_terminate);
+			_m_registry.try_emplace(name, name, typeid(specific_event));
 			topic& this_topic = _m_registry.at(name);
 			assert(this_topic.ty() == typeid(specific_event));
 			return this_topic;
@@ -344,7 +374,6 @@ static void foo(ptr<const event> datum) {
 		}
 
 	private:
-		std::atomic<bool> _m_terminate{false};
 		std::mutex _m_registry_lock;
 		std::unordered_map<std::string, topic> _m_registry;
 	};

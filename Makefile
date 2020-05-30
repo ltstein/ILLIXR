@@ -29,7 +29,7 @@ all.dbg.so: runtime/plugin.dbg.so $(plugins:/=/plugin.dbg.so) data1
 all.opt.so: runtime/plugin.opt.so $(plugins:/=/plugin.opt.so) data1
 
 .PHONY: gdb
-gdb: runtime/main.dbg.exe $(plugins:/=/plugin.dbg.so) data1
+run.gdb: runtime/main.dbg.exe $(plugins:/=/plugin.dbg.so) data1
 	gdb -q --args runtime/main.dbg.exe $(plugins:/=/plugin.dbg.so)
 
 data1:
@@ -39,9 +39,12 @@ data1:
 	rm -rf __MACOSX data1 && \
 	mv mav0 data1
 
-.PHONY: deepclean
-deepclean: clean
-	touch data1 && rm -rf data1
+.PHONY: tests
+tests: runtime/tests $(plugins:/=/tests)
+
+.PHONY: runtime/tests $(plugins:/=/tests)
+runtime/tests $(plugins:/=/tests):
+	$(MAKE) -C $(dir $@) tests
 
 .PHONY: clean
 clean: runtime/clean $(plugins:/=/clean)
@@ -49,3 +52,11 @@ clean: runtime/clean $(plugins:/=/clean)
 .PHONY: runtime/clean $(plugins:/=/clean)
 runtime/clean $(plugins:/=/clean):
 	$(MAKE) -C $(dir $@) clean
+
+.PHONY: deepclean
+deepclean: runtime/deepclean $(plugins:/=/deepclean)
+	touch data1 && rm -rf data1
+
+.PHONY: runtime/deepclean $(plugins:/=/deepclean)
+runtime/deepclean $(plugins:/=/deepclean):
+	$(MAKE) -C $(dir $@) deepclean
