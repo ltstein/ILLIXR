@@ -1,4 +1,4 @@
-plugins    = ground_truth_slam/ offline_imu_cam/ open_vins/ pose_prediction/ timewarp_gl/ gldemo/ debugview/ audio_pipeline/
+plugins = zed/ ground_truth_slam/ open_vins/ pose_prediction/ timewarp_gl/ gldemo/ debugview/ audio_pipeline/ 
 
 .PHONY: %/plugin.dbg.so
 %/plugin.dbg.so: %
@@ -10,7 +10,7 @@ plugins    = ground_truth_slam/ offline_imu_cam/ open_vins/ pose_prediction/ tim
 
 .PHONY: run.dbg
 run.dbg: runtime/main.dbg.exe $(plugins:/=/plugin.dbg.so) data1
-	     runtime/main.dbg.exe $(plugins:/=/plugin.dbg.so)
+	     runtime/main.dbg.exe $(plugins:/=/plugin.dbg.so) 
 
 .PHONY: run.opt
 run.opt: runtime/main.opt.exe $(plugins:/=/plugin.opt.so) data1
