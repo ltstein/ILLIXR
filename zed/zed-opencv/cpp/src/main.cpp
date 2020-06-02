@@ -23,7 +23,8 @@
  ** Depth and images are captured with the ZED SDK, converted to OpenCV format and displayed. **
  ***********************************************************************************************/
 
-#include <sl/Camera.hpp>  // ZED includes
+// ZED includes
+#include <sl/Camera.hpp>
 #include <opencv2/opencv.hpp>
 #include <SaveDepth.hpp>
 #include <thread>
@@ -41,58 +42,60 @@ cv::Mat slMat2cvMat(Mat& input);
 
 void printHelp();
 
-Camera zedm;
-
 class camerastart {
 public:
-  camerastart() {
+  camerastart() { }
+
+  std::shared_ptr<Camera> start_camera() {
+    std::shared_ptr<Camera> zedm = std::make_shared<Camera>();
+
     InitParameters init_params;
     // Cam Setup
-    init_params.camera_resolution = RESOLUTION::HD1080;
+    init_params.camera_resolution = RESOLUTION::VGA;
     init_params.depth_mode = DEPTH_MODE::ULTRA;
     init_params.coordinate_units = UNIT::METER;
 
     // Open the camera
-    ERROR_CODE err = zedm.open(init_params);
+    ERROR_CODE err = zedm->open(init_params);
     if (err != ERROR_CODE::SUCCESS) {
         printf("%s\n", toString(err).c_str());
-        zedm.close();
+        zedm->close();
     }
+
+    return zedm;
   }
 };
 
-camerastart camerastart_;
-
 class camera_thread : public threadloop {
 public:
-  camera_thread()
+  camera_thread(std::shared_ptr<Camera> zedm_) : zedm{zedm_}
   {
     // Cam setup
     runtime_parameters.sensing_mode = SENSING_MODE::STANDARD;
-    image_size = zedm.getCameraInformation().camera_resolution;
-    new_width = image_size.width / 2;
-    new_height = image_size.height / 2;
-    new_image_size = Resolution(new_width, new_height);
-    imageL_zed = Mat(new_width, new_height, MAT_TYPE::U8_C4);
+    image_size = zedm->getCameraInformation().camera_resolution;
+    //imageL_zed = Mat(image_size.width, image_size.height, MAT_TYPE::U8_C4);
+    //imageR_zed = Mat(image_size.width, image_size.height, MAT_TYPE::U8_C4);
+    imageL_zed.alloc(image_size.width, image_size.height, MAT_TYPE::U8_C4, MEM::CPU);
+    imageR_zed.alloc(image_size.width, image_size.height, MAT_TYPE::U8_C4, MEM::CPU);
     imageL_ocv = slMat2cvMat(imageL_zed);
-    imageR_zed = Mat(new_width, new_height, MAT_TYPE::U8_C4);
     imageR_ocv = slMat2cvMat(imageR_zed);
   }
+
   // using std::atomic b/c data is passed between threads
   std::atomic<cv::Mat*> img0;
   std::atomic<cv::Mat*> img1;
 
 protected:
   virtual void _p_one_iteration() override {
-    //std::cout << "IS THIS WORKING **********************************************************************************************" << std::endl;
-    if (zedm.grab(runtime_parameters) == ERROR_CODE::SUCCESS) {
+    if (zedm->grab(runtime_parameters) == ERROR_CODE::SUCCESS) {
 
-      std::cout << "Camera test *********************************************************************" << std::endl;
-
+      std::cout << "Camera Test *******************************************************************" << std::endl;
       // Retrieve images
-      zedm.retrieveImage(imageL_zed, VIEW::LEFT, MEM::CPU, new_image_size);
-      zedm.retrieveImage(imageR_zed, VIEW::RIGHT, MEM::CPU, new_image_size);
-      //std::cout << "Camera test *********************************************************************" << std::endl;
+      zedm->retrieveImage(imageL_zed, VIEW::LEFT, MEM::CPU, image_size);
+      zedm->retrieveImage(imageR_zed, VIEW::RIGHT, MEM::CPU, image_size);
+
+      imageL_zed.updateGPUfromCPU();
+      imageR_zed.updateGPUfromCPU();
 
       // Convert to Grayscale
       cv::cvtColor(imageL_ocv, grayL, CV_BGR2GRAY);
@@ -104,28 +107,23 @@ protected:
 
       img0 = &grayL;
       img1 = &grayR;
-
-
     }
   }
 
 private:
+  std::shared_ptr<Camera> zedm;
+
   // Set runtime parameters after opening the camera
   RuntimeParameters runtime_parameters;
 
-  // Prepare new image size to retrieve half-resolution images
   Resolution image_size;
-  int new_width;
-  int new_height;
-
-  Resolution new_image_size;
 
   // To share data between sl::Mat and cv::Mat, use slMat2cvMat()
   // Only the headers and pointer to the sl::Mat are copied, not the data itself
   Mat imageL_zed;
-  cv::Mat imageL_ocv;
-
   Mat imageR_zed;
+
+  cv::Mat imageL_ocv;
   cv::Mat imageR_ocv;
 
   cv::Mat grayL;
@@ -141,29 +139,27 @@ public:
     zed(phonebook* pb)
         : sb{pb->lookup_impl<switchboard>()}
         , _m_imu_cam{sb->publish<imu_cam_type>("imu_cam")}
-        , camera_thread_{}
+        , zedm{camerastart_.start_camera()}
+        , camera_thread_{zedm}
     {
       camera_thread_.start();
     }
 
-    // virtual void start() override {
-    // }
-
     // deconstructor
     virtual ~zed() override {
-        zedm.close();
+        zedm->close();
     }
 
 protected: // a continuous loop
     virtual void _p_one_iteration() override {
-        //std::cout << "IMU test *********************************************************************" << std::endl;
-        zedm.getSensorsData(sensors_data, TIME_REFERENCE::CURRENT);
+        zedm->getSensorsData(sensors_data, TIME_REFERENCE::CURRENT);
 
         if (sensors_data.imu.timestamp > last_imu_ts) {
-            std::cout << "IMU test *********************************************************************" << std::endl;
+            std::cout << "IMU Test *******************************************************************" << std::endl;
+
             // Time as ullong (nanoseconds)
             imu_time = static_cast<ullong>(sensors_data.imu.timestamp.getNanoseconds());
-            cam_time = static_cast<ullong>(zedm.getTimestamp(TIME_REFERENCE::IMAGE));
+            cam_time = static_cast<ullong>(zedm->getTimestamp(TIME_REFERENCE::IMAGE));
 
             // Time as time_point
             using time_point = std::chrono::system_clock::time_point;
@@ -223,9 +219,12 @@ protected: // a continuous loop
     }
 
 private:
+    std::shared_ptr<Camera> zedm;
+    camera_thread camera_thread_;
+    camerastart camerastart_;
+
     switchboard* sb;
     std::unique_ptr<writer<imu_cam_type>> _m_imu_cam;
-    camera_thread camera_thread_;
 
     // IMU
     SensorsData sensors_data;
