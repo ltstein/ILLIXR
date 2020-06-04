@@ -6,22 +6,6 @@
 
 #IncludeRegexTransform: 
 
-../include/SaveDepth.hpp
-iomanip
--
-signal.h
--
-iostream
--
-limits
--
-thread
--
-opencv2/opencv.hpp
--
-sl/Camera.hpp
--
-
 /home/hyjale/ILLIXR/zed/zed-opencv/cpp/src/common/data_format.hpp
 iostream
 -
@@ -81,9 +65,7 @@ sl/Camera.hpp
 -
 opencv2/opencv.hpp
 -
-SaveDepth.hpp
--
-thread
+cmath
 -
 common/switchboard.hpp
 /home/hyjale/ILLIXR/zed/zed-opencv/cpp/src/common/switchboard.hpp

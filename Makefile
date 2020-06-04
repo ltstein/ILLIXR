@@ -1,4 +1,4 @@
-plugins = zed/ ground_truth_slam/ open_vins/ pose_prediction/ timewarp_gl/ gldemo/ debugview/ audio_pipeline/ 
+plugins =  ground_truth_slam/ zed/ open_vins/ pose_prediction/ timewarp_gl/ gldemo/ debugview/ audio_pipeline/ 
 
 .PHONY: %/plugin.dbg.so
 %/plugin.dbg.so: %

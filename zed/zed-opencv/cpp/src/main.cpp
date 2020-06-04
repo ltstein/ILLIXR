@@ -1,33 +1,7 @@
-///////////////////////////////////////////////////////////////////////////
-//
-// Copyright (c) 2020, STEREOLABS.
-//
-// All rights reserved.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-///////////////////////////////////////////////////////////////////////////
-
-/***********************************************************************************************
- ** This sample demonstrates how to use the ZED SDK with OpenCV.                              **
- ** Depth and images are captured with the ZED SDK, converted to OpenCV format and displayed. **
- ***********************************************************************************************/
-
 // ZED includes
 #include <sl/Camera.hpp>
 #include <opencv2/opencv.hpp>
-#include <SaveDepth.hpp>
-#include <thread>
+#include <cmath>
 
 #include "common/switchboard.hpp"
 #include "common/data_format.hpp"
@@ -35,12 +9,9 @@
 #include "common/threadloop.hpp"
 
 using namespace sl;
-using namespace std;
 using namespace ILLIXR;
 
 cv::Mat slMat2cvMat(Mat& input);
-
-void printHelp();
 
 class camerastart {
 public:
@@ -62,6 +33,23 @@ public:
         zedm->close();
     }
 
+    // // Set tracking parameters
+    // PositionalTrackingParameters track_params;
+    // float data_ext[16] =
+    // {1.0, 0.0, 0.0, 0.0,
+    //  0.0, 1.0, 0.0, 0.0,
+    //  0.0, 0.0, 1.0, 0.0,
+    //  0.0, 0.0, 0.0, 1.0};
+    // Matrix4f euroc_reference(data_ext);
+    // Transform new_world_trans(euroc_reference);
+    // track_params.initial_world_transform = new_world_trans;
+    //
+    // err = zedm->enablePositionalTracking(track_params);
+    // if (err != ERROR_CODE::SUCCESS) {
+    //   std::cout << "Tracking error: " << toString(err) << std::endl;
+    //   exit(-1);
+    // }
+
     return zedm;
   }
 };
@@ -73,15 +61,12 @@ public:
     // Cam setup
     runtime_parameters.sensing_mode = SENSING_MODE::STANDARD;
     image_size = zedm->getCameraInformation().camera_resolution;
-    //imageL_zed = Mat(image_size.width, image_size.height, MAT_TYPE::U8_C4);
-    //imageR_zed = Mat(image_size.width, image_size.height, MAT_TYPE::U8_C4);
     imageL_zed.alloc(image_size.width, image_size.height, MAT_TYPE::U8_C4, MEM::CPU);
     imageR_zed.alloc(image_size.width, image_size.height, MAT_TYPE::U8_C4, MEM::CPU);
     imageL_ocv = slMat2cvMat(imageL_zed);
     imageR_ocv = slMat2cvMat(imageR_zed);
   }
 
-  // using std::atomic b/c data is passed between threads
   std::atomic<cv::Mat*> img0;
   std::atomic<cv::Mat*> img1;
 
@@ -89,21 +74,13 @@ protected:
   virtual void _p_one_iteration() override {
     if (zedm->grab(runtime_parameters) == ERROR_CODE::SUCCESS) {
 
-      std::cout << "Camera Test *******************************************************************" << std::endl;
       // Retrieve images
       zedm->retrieveImage(imageL_zed, VIEW::LEFT, MEM::CPU, image_size);
       zedm->retrieveImage(imageR_zed, VIEW::RIGHT, MEM::CPU, image_size);
 
-      imageL_zed.updateGPUfromCPU();
-      imageR_zed.updateGPUfromCPU();
-
       // Convert to Grayscale
       cv::cvtColor(imageL_ocv, grayL, CV_BGR2GRAY);
       cv::cvtColor(imageR_ocv, grayR, CV_BGR2GRAY);
-
-      // Display images using cv:Mat which share sl:Mat data
-      cv::imshow("cam0", grayL);
-      cv::imshow("cam1", grayR);
 
       img0 = &grayL;
       img1 = &grayR;
@@ -113,9 +90,7 @@ protected:
 private:
   std::shared_ptr<Camera> zedm;
 
-  // Set runtime parameters after opening the camera
   RuntimeParameters runtime_parameters;
-
   Resolution image_size;
 
   // To share data between sl::Mat and cv::Mat, use slMat2cvMat()
@@ -150,16 +125,15 @@ public:
         zedm->close();
     }
 
-protected: // a continuous loop
+protected:
+    // a continuous loop
     virtual void _p_one_iteration() override {
         zedm->getSensorsData(sensors_data, TIME_REFERENCE::CURRENT);
 
         if (sensors_data.imu.timestamp > last_imu_ts) {
-            std::cout << "IMU Test *******************************************************************" << std::endl;
 
             // Time as ullong (nanoseconds)
             imu_time = static_cast<ullong>(sensors_data.imu.timestamp.getNanoseconds());
-            cam_time = static_cast<ullong>(zedm->getTimestamp(TIME_REFERENCE::IMAGE));
 
             // Time as time_point
             using time_point = std::chrono::system_clock::time_point;
@@ -167,29 +141,9 @@ protected: // a continuous loop
             std::time_t time2 = std::chrono::system_clock::to_time_t(uptime_timepoint);
             t = std::chrono::system_clock::from_time_t(time2);
 
-            // Linear Acceleration and Angular Velocity
-            Eigen::Vector3f la {sensors_data.imu.linear_acceleration.x, sensors_data.imu.linear_acceleration.y, sensors_data.imu.linear_acceleration.z};
-            Eigen::Vector3f av {sensors_data.imu.angular_velocity.x, sensors_data.imu.angular_velocity.x, sensors_data.imu.angular_velocity.z};
-
-            // std::optional<cv::Mat*> img0 = camera_thread_.img0.load();
-            // std::optional<cv::Mat*> img1 = camera_thread_.img1.load();
-            //
-            // if (imu_time == cam_time) {
-            //   img0 = camera_thread_.img0;
-            //   img1 = camera_thread_.img1;
-            // } else {
-            //   img0 = std::nullopt;
-            //   img1 = std::nullopt;
-            // }
-            //
-            // _m_imu_cam->put(new imu_cam_type{
-            //   t,
-            //   av,
-            //   la,
-            //   img0,
-            //   img1,
-            //   imu_time,
-            //   });
+            // // Linear Acceleration and Angular Velocity
+            la = {sensors_data.imu.linear_acceleration.x, sensors_data.imu.linear_acceleration.y, sensors_data.imu.linear_acceleration.z};
+            av = {sensors_data.imu.angular_velocity.x  * (M_PI/180), sensors_data.imu.angular_velocity.y * (M_PI/180), sensors_data.imu.angular_velocity.z * (M_PI/180)};
 
             cv::Mat* img0 = camera_thread_.img0.load();
             cv::Mat* img1 = camera_thread_.img1.load();
@@ -214,6 +168,7 @@ protected: // a continuous loop
               });
             }
 
+            std::cout << "IMU rate: " << sensors_data.imu.effective_rate << "hz" << std::endl;
             last_imu_ts = sensors_data.imu.timestamp;
         }
     }
@@ -229,11 +184,12 @@ private:
     // IMU
     SensorsData sensors_data;
     Timestamp last_imu_ts = 0;
+    Eigen::Vector3f la;
+    Eigen::Vector3f av;
 
     // Timestamps
     time_type t;
     ullong imu_time;
-    ullong cam_time;
 };
 
 // This line makes the plugin importable by Spindle
@@ -264,15 +220,4 @@ cv::Mat slMat2cvMat(Mat& input) {
     // Since cv::Mat data requires a uchar* pointer, we get the uchar1 pointer from sl::Mat (getPtr<T>())
     // cv::Mat and sl::Mat will share a single memory structure
     return cv::Mat(input.getHeight(), input.getWidth(), cv_type, input.getPtr<sl::uchar1>(MEM::CPU));
-}
-
-/**
-* This function displays help in console
-**/
-void printHelp() {
-    std::cout << " Press 's' to save Side by side images" << std::endl;
-    std::cout << " Press 'p' to save Point Cloud" << std::endl;
-    std::cout << " Press 'd' to save Depth image" << std::endl;
-    std::cout << " Press 'm' to switch Point Cloud format" << std::endl;
-    std::cout << " Press 'n' to switch Depth format" << std::endl;
 }
