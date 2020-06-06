@@ -3,6 +3,7 @@
 #include <opencv2/opencv.hpp>
 #include <cmath>
 
+//ILLiXR includes
 #include "common/switchboard.hpp"
 #include "common/data_format.hpp"
 #include "common/plugin.hpp"
@@ -20,11 +21,12 @@ public:
   std::shared_ptr<Camera> start_camera() {
     std::shared_ptr<Camera> zedm = std::make_shared<Camera>();
 
+    // Cam setup
     InitParameters init_params;
-    // Cam Setup
-    init_params.camera_resolution = RESOLUTION::VGA;
+    init_params.camera_resolution = RESOLUTION::HD720;
     init_params.depth_mode = DEPTH_MODE::ULTRA;
     init_params.coordinate_units = UNIT::METER;
+    init_params.coordinate_system = COORDINATE_SYSTEM::RIGHT_HANDED_Z_UP_X_FWD; // Coordinate system used in ROS
 
     // Open the camera
     ERROR_CODE err = zedm->open(init_params);
@@ -32,23 +34,6 @@ public:
         printf("%s\n", toString(err).c_str());
         zedm->close();
     }
-
-    // // Set tracking parameters
-    // PositionalTrackingParameters track_params;
-    // float data_ext[16] =
-    // {1.0, 0.0, 0.0, 0.0,
-    //  0.0, 1.0, 0.0, 0.0,
-    //  0.0, 0.0, 1.0, 0.0,
-    //  0.0, 0.0, 0.0, 1.0};
-    // Matrix4f euroc_reference(data_ext);
-    // Transform new_world_trans(euroc_reference);
-    // track_params.initial_world_transform = new_world_trans;
-    //
-    // err = zedm->enablePositionalTracking(track_params);
-    // if (err != ERROR_CODE::SUCCESS) {
-    //   std::cout << "Tracking error: " << toString(err) << std::endl;
-    //   exit(-1);
-    // }
 
     return zedm;
   }
@@ -58,7 +43,7 @@ class camera_thread : public threadloop {
 public:
   camera_thread(std::shared_ptr<Camera> zedm_) : zedm{zedm_}
   {
-    // Cam setup
+    // Image setup
     runtime_parameters.sensing_mode = SENSING_MODE::STANDARD;
     image_size = zedm->getCameraInformation().camera_resolution;
     imageL_zed.alloc(image_size.width, image_size.height, MAT_TYPE::U8_C4, MEM::CPU);
@@ -67,6 +52,7 @@ public:
     imageR_ocv = slMat2cvMat(imageR_zed);
   }
 
+  // Images to be passed to main class
   std::atomic<cv::Mat*> img0;
   std::atomic<cv::Mat*> img1;
 
@@ -100,7 +86,6 @@ private:
 
   cv::Mat imageL_ocv;
   cv::Mat imageR_ocv;
-
   cv::Mat grayL;
   cv::Mat grayR;
 };
@@ -125,6 +110,7 @@ public:
         zedm->close();
     }
 
+
 protected:
     // a continuous loop
     virtual void _p_one_iteration() override {
@@ -141,12 +127,13 @@ protected:
             std::time_t time2 = std::chrono::system_clock::to_time_t(uptime_timepoint);
             t = std::chrono::system_clock::from_time_t(time2);
 
-            // // Linear Acceleration and Angular Velocity
-            la = {sensors_data.imu.linear_acceleration.x, sensors_data.imu.linear_acceleration.y, sensors_data.imu.linear_acceleration.z};
-            av = {sensors_data.imu.angular_velocity.x  * (M_PI/180), sensors_data.imu.angular_velocity.y * (M_PI/180), sensors_data.imu.angular_velocity.z * (M_PI/180)};
+            // Linear Acceleration and Angular Velocity (converted from deg/s to rad/s)
+            la = {sensors_data.imu.linear_acceleration_uncalibrated.x , sensors_data.imu.linear_acceleration_uncalibrated.y, sensors_data.imu.linear_acceleration_uncalibrated.z };
+            av = {sensors_data.imu.angular_velocity_uncalibrated.x  * (M_PI/180), sensors_data.imu.angular_velocity_uncalibrated.y * (M_PI/180), sensors_data.imu.angular_velocity_uncalibrated.z * (M_PI/180)};
 
-            cv::Mat* img0 = camera_thread_.img0.load();
-            cv::Mat* img1 = camera_thread_.img1.load();
+            // Images from camera thread, exchanged w/ NULL if empty
+            cv::Mat* img0 = camera_thread_.img0.exchange(nullptr);
+            cv::Mat* img1 = camera_thread_.img1.exchange(nullptr);
 
             if (img0 && img1) {
               _m_imu_cam->put(new imu_cam_type{
@@ -168,7 +155,6 @@ protected:
               });
             }
 
-            std::cout << "IMU rate: " << sensors_data.imu.effective_rate << "hz" << std::endl;
             last_imu_ts = sensors_data.imu.timestamp;
         }
     }
