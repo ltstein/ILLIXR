@@ -465,7 +465,7 @@ public:
 		const pose_type latest_pose = pp->get_fast_pose();
 		GetViewMatrixFromPose(&viewMatrixBegin, latest_pose);
 		if (true /*latest_pose is valid*/) {
-			GetViewMatrixFromPose(&viewMatrixBegin, *latest_pose);
+			GetViewMatrixFromPose(&viewMatrixBegin, latest_pose);
 		}
 
 		// std::cout << "Timewarp: old " << most_recent_frame->render_pose.pose << ", new " << latest_pose->pose << std::endl;
