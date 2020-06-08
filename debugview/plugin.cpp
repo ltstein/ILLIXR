@@ -56,10 +56,9 @@ public:
 	// constructor. In turn, the constructor fills in the private
 	// references to the switchboard plugs, so the plugin can read
 	// the data whenever it needs to.
-	debugview(phonebook *pb)
+	debugview(const phonebook *pb)
 		: sb{pb->lookup_impl<switchboard>()}
 		, pp{pb->lookup_impl<pose_prediction>()}
-
 		, _m_slow_pose{sb->get_reader<pose_type>("slow_pose")}
 		//, glfw_context{pb->lookup_impl<global_config>()->glfw_context}
 	{}
@@ -146,34 +145,40 @@ public:
 			ImGui::Text("Resets to zero'd out tracking universe");
 		}
 		ImGui::Spacing();
+
+		const pose_type fast_pose = pp->get_fast_pose();
+		const ptr<const pose_type> slow_pose_ptr = _m_slow_pose.get_latest_ro_nullable();
+		const pose_type true_pose = pp->get_fast_true_pose();
 		ImGui::Text("Switchboard connection status:");
 		ImGui::Text("Fast pose topic:");
 		ImGui::SameLine();
-		std::optional<const pose_type> fast_pose_ptr = pp->get_fast_pose();
-		ptr<const pose_type> slow_pose_ptr = _m_slow_pose.get_latest_ro_nullable();
-		std::optional<const pose_type> true_pose_ptr = pp->get_fast_true_pose();
-		if (fast_pose_ptr) {
+
+		if(true /*fast_pose is valid*/) {
 			ImGui::TextColored(ImVec4(0.0, 1.0, 0.0, 1.0), "Valid fast pose pointer");
-			ImGui::Text("Fast pose position (XYZ):\n  (%f, %f, %f)", fast_pose_ptr->position.x(), fast_pose_ptr->position.y(), fast_pose_ptr->position.z());
-			ImGui::Text("Fast pose quaternion (XYZW):\n  (%f, %f, %f, %f)", fast_pose_ptr->orientation.x(), fast_pose_ptr->orientation.y(), fast_pose_ptr->orientation.z(), fast_pose_ptr->orientation.w());
+			ImGui::Text("Fast pose position (XYZ):\n  (%f, %f, %f)", fast_pose.position.x(), fast_pose.position.y(), fast_pose.position.z());
+			ImGui::Text("Fast pose quaternion (XYZW):\n  (%f, %f, %f, %f)", fast_pose.orientation.x(), fast_pose.orientation.y(), fast_pose.orientation.z(), fast_pose.orientation.w());
 		} else {
 			ImGui::TextColored(ImVec4(1.0, 0.0, 0.0, 1.0), "Invalid fast pose pointer");
 		}
+
 		ImGui::Text("Slow pose topic:");
 		ImGui::SameLine();
-		if(slow_pose_ptr) {
+
+		if(slow_pose_ptr){
 			ImGui::TextColored(ImVec4(0.0, 1.0, 0.0, 1.0), "Valid slow pose pointer");
 			ImGui::Text("Slow pose position (XYZ):\n  (%f, %f, %f)", slow_pose_ptr->position.x(), slow_pose_ptr->position.y(), slow_pose_ptr->position.z());
 			ImGui::Text("Slow pose quaternion (XYZW):\n  (%f, %f, %f, %f)", slow_pose_ptr->orientation.x(), slow_pose_ptr->orientation.y(), slow_pose_ptr->orientation.z(), slow_pose_ptr->orientation.w());
 		} else {
 			ImGui::TextColored(ImVec4(1.0, 0.0, 0.0, 1.0), "Invalid slow pose pointer");
 		}
+
 		ImGui::Text("GROUND TRUTH pose topic:");
 		ImGui::SameLine();
-		if (true_pose_ptr) {
+
+		if (true /*true_pose is valid*/) {
 			ImGui::TextColored(ImVec4(0.0, 1.0, 0.0, 1.0), "Valid ground truth pose pointer");
-			ImGui::Text("Ground truth position (XYZ):\n  (%f, %f, %f)", true_pose_ptr->position.x(), true_pose_ptr->position.y(), true_pose_ptr->position.z());
-			ImGui::Text("Ground truth quaternion (XYZW):\n  (%f, %f, %f, %f)", true_pose_ptr->orientation.x(), true_pose_ptr->orientation.y(), true_pose_ptr->orientation.z(), true_pose_ptr->orientation.w());
+			ImGui::Text("Ground truth position (XYZ):\n  (%f, %f, %f)", true_pose.position.x(), true_pose.position.y(), true_pose.position.z());
+			ImGui::Text("Ground truth quaternion (XYZW):\n  (%f, %f, %f, %f)", true_pose.orientation.x(), true_pose.orientation.y(), true_pose.orientation.z(), true_pose.orientation.w());
 		} else {
 			ImGui::TextColored(ImVec4(1.0, 0.0, 0.0, 1.0), "Invalid ground truth pose pointer");
 		}
@@ -187,11 +192,10 @@ public:
 		ImGui::Text("Camera view buffers: ");
 		ImGui::Text("	Camera0: (%d, %d) \n		GL texture handle: %d", camera_texture_sizes[0].x(), camera_texture_sizes[0].y(), camera_textures[0]);
 		ImGui::Text("	Camera1: (%d, %d) \n		GL texture handle: %d", camera_texture_sizes[1].x(), camera_texture_sizes[1].y(), camera_textures[1]);
-		if (ImGui::Button("Calculate new orientation offset")){
-			std::optional<pose_type> fast_pose_ptr = pp->get_fast_pose();
-			if (fast_pose_ptr) {
-				offsetQuat = Eigen::Quaternionf(fast_pose_ptr->orientation);
-			}
+
+		if(ImGui::Button("Calculate new orientation offset")){
+			const pose_type pose = pp->get_fast_pose();
+			offsetQuat = Eigen::Quaternionf(pose.orientation);
 		}
 		ImGui::End();
 
@@ -309,27 +313,30 @@ public:
 
 			glUseProgram(demoShaderProgram);
 
+			const pose_type pose = pp->get_fast_pose();
+
 			Eigen::Matrix4f headsetPose = Eigen::Matrix4f::Identity();
 			Eigen::Matrix4f headsetPosition = Eigen::Matrix4f::Identity();
 
-			std::optional<pose_type> pose_ptr = pp->get_fast_pose();
-			if(pose_ptr) {
+			
+
+			if(true /*pose is valid*/) {
 				// We have a valid pose from our Switchboard plug.
 
 				if(counter == 100){
-					std::cerr << "First pose received: quat(wxyz) is " << pose_ptr->orientation.w() << ", " << pose_ptr->orientation.x() << ", " << pose_ptr->orientation.y() << ", " << pose_ptr->orientation.z() << std::endl;
-					offsetQuat = Eigen::Quaternionf(pose_ptr->orientation);
+					std::cerr << "First pose received: quat(wxyz) is " << pose.orientation.w() << ", " << pose.orientation.x() << ", " << pose.orientation.y() << ", " << pose.orientation.z() << std::endl;
+					offsetQuat = Eigen::Quaternionf(pose.orientation);
 				}
 				counter++;
 
-				Eigen::Quaternionf combinedQuat = pose_ptr->orientation * offsetQuat.inverse();
-				headsetPose = generateHeadsetTransform(pose_ptr->position, combinedQuat, tracking_position_offset);
+				Eigen::Quaternionf combinedQuat = pose.orientation * offsetQuat.inverse();
+				headsetPose = generateHeadsetTransform(pose.position, combinedQuat, tracking_position_offset);
 			}
 
 			Eigen::Matrix4f modelMatrix = Eigen::Matrix4f::Identity();
 
 			// If we are following the headset, and have a valid pose, apply the optional offset.
-			Eigen::Vector3f optionalOffset = (follow_headset && pose_ptr) ? (pose_ptr->position + tracking_position_offset) : Eigen::Vector3f{0.0f,0.0f,0.0f};
+			Eigen::Vector3f optionalOffset = (follow_headset) ? (pose.position + tracking_position_offset) : Eigen::Vector3f{0.0f,0.0f,0.0f};
 
 			Eigen::Matrix4f userView = lookAt(Eigen::Vector3f{(float)(view_dist * cos(view_euler.y())),
 															  (float)(view_dist * sin(view_euler.x())), 
@@ -370,9 +377,9 @@ public:
 			headsetObject.color = {0.2,0.2,0.2,1};
 			headsetObject.drawMe();
 
-			std::optional<pose_type> groundtruth_pose_ptr = pp->get_fast_true_pose();
-			if(groundtruth_pose_ptr){
-				headsetPose = generateHeadsetTransform(groundtruth_pose_ptr->position, groundtruth_pose_ptr->orientation, tracking_position_offset);
+			const pose_type groundtruth_pose = pp->get_fast_true_pose();
+			if(true /*groundtruth_pose is valid */) {
+				headsetPose = generateHeadsetTransform(groundtruth_pose.position, groundtruth_pose.orientation, tracking_position_offset);
 			}
 			modelView = userView * headsetPose;
 			glUniformMatrix4fv(modelViewAttr, 1, GL_FALSE, (GLfloat*)modelView.data());
@@ -393,8 +400,8 @@ private:
 	std::atomic<bool> _m_terminate {false};
 
 	//GLFWwindow * const glfw_context;
-	switchboard* sb;
-	pose_prediction* pp;
+	const std::shared_ptr<switchboard> sb;
+	const std::shared_ptr<const pose_prediction> pp;
 
 	switchboard::reader<pose_type> _m_slow_pose;
 	// switchboard::reader<imu_cam_type> _m_imu_cam_data;

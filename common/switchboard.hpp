@@ -295,11 +295,11 @@ namespace ILLIXR {
 			 */
 
 		public:
-			bool valid() {
+			bool valid() const {
 				return bool{_m_topic._m_latest.load()};
 			}
 
-			ptr<const specific_event> get_latest_ro_nullable() {
+			ptr<const specific_event> get_latest_ro_nullable() const {
 				/* Proof of thread-safety:
 				   - Reads _m_topic, which is const.
 				   - Reads _m_topic._m_latest using atomics.
@@ -322,7 +322,7 @@ namespace ILLIXR {
 				}
 			}
 
-			ptr<const specific_event> get_latest_ro() {
+			ptr<const specific_event> get_latest_ro() const {
 				assert(valid());
 				ptr<const specific_event> this_specific_event = get_latest_ro_nullable();
 				assert(this_specific_event && "Writer pushed null, but reader is not reading nullable");

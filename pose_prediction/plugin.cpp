@@ -7,21 +7,20 @@ using namespace ILLIXR;
 
 class pose_prediction_impl : public pose_prediction {
 public:
-    pose_prediction_impl(phonebook* pb_)
-    	: pb{pb_}
-		, sb{pb->lookup_impl<switchboard>()}
+    pose_prediction_impl(const phonebook* pb)
+		: sb{pb->lookup_impl<switchboard>()}
 		, _m_pose{sb->get_reader<pose_type>("slow_pose")}
         , _m_true_pose{sb->get_reader<pose_type>("true_pose")}
     { }
 
-    virtual pose_type get_fast_pose() override {
+    virtual pose_type get_fast_pose() const override {
 		ptr<const pose_type> pose_ptr = _m_pose.get_latest_ro_nullable();
 		return correct_pose(
 			pose_ptr ? *pose_ptr : pose_type{}
 		);
     }
 
-    virtual pose_type get_fast_true_pose() override {
+    virtual pose_type get_fast_true_pose() const override {
 		ptr<const pose_type> pose_ptr = _m_true_pose.get_latest_ro_nullable();
 		return correct_pose(
 			pose_ptr ? *pose_ptr : pose_type{}
@@ -29,13 +28,11 @@ public:
     }
 
 private:
-    phonebook* const pb;
-    switchboard* const sb;
+	const std::shared_ptr<switchboard> sb;
     switchboard::reader<pose_type> _m_pose;
     switchboard::reader<pose_type> _m_true_pose;
-	std::atomic<bool> _m_valid;
     
-    pose_type correct_pose(const pose_type pose) {
+    pose_type correct_pose(const pose_type pose) const {
         pose_type swapped_pose {pose};
 
         // This uses the OpenVINS standard output coordinate system.
@@ -60,14 +57,13 @@ private:
 
 class pose_prediction_plugin : public plugin {
 public:
-    pose_prediction_plugin(phonebook* pb_)
-    	: pb{pb_}
-	{
-		pb->register_impl<pose_prediction>(std::make_unique<pose_prediction_impl>(pb));
+    pose_prediction_plugin(phonebook* pb) {
+		pb->register_impl<pose_prediction>(
+			std::static_pointer_cast<pose_prediction>(
+				std::make_shared<pose_prediction_impl>(pb)
+			)
+		);
 	}
-
-private:
-	phonebook* pb;
 };
 
 PLUGIN_MAIN(pose_prediction_plugin);
