@@ -1,7 +1,3 @@
-#LDFLAGS = $(shell pkg-config opencv --libs)
-#CFLAGS = $(shell pkg-config opencv --cflags)
-#include common/common.mk
-
 .PHONY: plugin.dbg.so
 plugin.dbg.so:
 	mkdir -p zed-opencv/cpp/build/ && \
@@ -20,4 +16,3 @@ plugin.opt.so:
 .PHONY: clean
 clean:
 	touch zed-opencv/cpp/build && rm -rf zed-opencv/cpp/build *.so
-

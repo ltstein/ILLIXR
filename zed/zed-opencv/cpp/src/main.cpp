@@ -127,11 +127,11 @@ protected:
             std::time_t time2 = std::chrono::system_clock::to_time_t(uptime_timepoint);
             t = std::chrono::system_clock::from_time_t(time2);
 
-            // Linear Acceleration and Angular Velocity (converted from deg/s to rad/s)
+            // Linear Acceleration and Angular Velocity (av converted from deg/s to rad/s)
             la = {sensors_data.imu.linear_acceleration_uncalibrated.x , sensors_data.imu.linear_acceleration_uncalibrated.y, sensors_data.imu.linear_acceleration_uncalibrated.z };
             av = {sensors_data.imu.angular_velocity_uncalibrated.x  * (M_PI/180), sensors_data.imu.angular_velocity_uncalibrated.y * (M_PI/180), sensors_data.imu.angular_velocity_uncalibrated.z * (M_PI/180)};
 
-            // Images from camera thread, exchanged w/ NULL if empty
+            // Images from camera thread, swapped with NULL b/c different rates in IMU and image data.
             cv::Mat* img0 = camera_thread_.img0.exchange(nullptr);
             cv::Mat* img1 = camera_thread_.img1.exchange(nullptr);
 
