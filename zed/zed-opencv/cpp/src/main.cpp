@@ -183,8 +183,8 @@ protected:
 
               for (int i = 0; i < 720; i++) {
                 for (int j = 0; j < 1280; j++) {
-                  depth = r->ptr<short*>(i)[j];
-                  rgb = d->ptr<char*>(i)[j];
+                  rgb = r->ptr<char*>(i)[j];
+                  depth = d->ptr<short*>(i)[j];
                 }
               }
               _m_rgb_depth->put(new rgb_depth_type{
