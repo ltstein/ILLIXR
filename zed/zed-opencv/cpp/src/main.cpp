@@ -169,7 +169,7 @@ protected:
               });
             }
 
-            u_cam_time = zedm->getTimestamp(TIME_REFERENCE::CURRENT);
+            u_cam_time = zedm->getTimestamp(TIME_REFERENCE::IMAGE);
             int64_t s_cam_time = static_cast<int64_t>(u_cam_time);
 
             cv::Mat* r = camera_thread_.rgb.exchange(nullptr);
@@ -179,14 +179,24 @@ protected:
             short* depth = new short[720 * 1280];
 
             if (r && d) {
-              //rgb = (char*) r->data;
+              // std::cout << r->isContinuous() << "rgb is continuous *********************************************************"<< std::endl;
+              // std::cout << d->isContinuous() << "depth is continuous ********************************************************" << std::endl;
 
-              for (int i = 0; i < 720; i++) {
-                for (int j = 0; j < 1280; j++) {
-                  rgb = r->ptr<char*>(i)[j];
-                  depth = d->ptr<short*>(i)[j];
-                }
+              // for (int i = 0; i < 720; i++) {
+              //   for (int j = 0; j < 1280; j++) {
+              //     rgb = r->ptr<char*>(i)[j];
+              //     depth = d->ptr<short*>(i)[j];
+              //   }
+              // }
+
+              if (r->isContinuous()) {
+                rgb = (char*) r->data;
               }
+
+              if (d->isContinuous()) {
+                depth = (short*) d->data;
+              }
+
               _m_rgb_depth->put(new rgb_depth_type{
               s_cam_time,
               rgb,
