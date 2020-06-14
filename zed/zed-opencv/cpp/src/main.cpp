@@ -3,7 +3,7 @@
 #include <opencv2/opencv.hpp>
 #include <cmath>
 
-//ILLiXR includes
+//ILLIXR includes
 #include "common/switchboard.hpp"
 #include "common/data_format.hpp"
 #include "common/plugin.hpp"
@@ -46,15 +46,22 @@ public:
     // Image setup
     runtime_parameters.sensing_mode = SENSING_MODE::STANDARD;
     image_size = zedm->getCameraInformation().camera_resolution;
+
     imageL_zed.alloc(image_size.width, image_size.height, MAT_TYPE::U8_C4, MEM::CPU);
     imageR_zed.alloc(image_size.width, image_size.height, MAT_TYPE::U8_C4, MEM::CPU);
+    depth_image_zed.alloc(image_size.width, image_size.height, MAT_TYPE::U8_C4, MEM::CPU);
+
     imageL_ocv = slMat2cvMat(imageL_zed);
     imageR_ocv = slMat2cvMat(imageR_zed);
+    depth_image_ocv = slMat2cvMat(depth_image_zed);
   }
 
-  // Images to be passed to main class
+  // for imu-cam
   std::atomic<cv::Mat*> img0;
   std::atomic<cv::Mat*> img1;
+  // for reconstruction
+  std::atomic<cv::Mat*> rgb;
+  std::atomic<cv::Mat*> depth;
 
 protected:
   virtual void _p_one_iteration() override {
@@ -63,6 +70,7 @@ protected:
       // Retrieve images
       zedm->retrieveImage(imageL_zed, VIEW::LEFT, MEM::CPU, image_size);
       zedm->retrieveImage(imageR_zed, VIEW::RIGHT, MEM::CPU, image_size);
+      zedm->retrieveImage(depth_image_zed, VIEW::DEPTH, MEM::CPU, image_size);
 
       // Convert to Grayscale
       cv::cvtColor(imageL_ocv, grayL, CV_BGR2GRAY);
@@ -70,6 +78,9 @@ protected:
 
       img0 = &grayL;
       img1 = &grayR;
+
+      rgb = &imageL_ocv;
+      depth = &depth_image_ocv;
     }
   }
 
@@ -83,11 +94,13 @@ private:
   // Only the headers and pointer to the sl::Mat are copied, not the data itself
   Mat imageL_zed;
   Mat imageR_zed;
+  Mat depth_image_zed;
 
   cv::Mat imageL_ocv;
   cv::Mat imageR_ocv;
   cv::Mat grayL;
   cv::Mat grayR;
+  cv::Mat depth_image_ocv;
 };
 
 class zed : public threadloop {
@@ -99,6 +112,7 @@ public:
     zed(phonebook* pb)
         : sb{pb->lookup_impl<switchboard>()}
         , _m_imu_cam{sb->publish<imu_cam_type>("imu_cam")}
+        , _m_rgb_depth{sb->publish<rgb_depth_type>("rgb_depth")}
         , zedm{camerastart_.start_camera()}
         , camera_thread_{zedm}
     {
@@ -131,7 +145,7 @@ protected:
             la = {sensors_data.imu.linear_acceleration_uncalibrated.x , sensors_data.imu.linear_acceleration_uncalibrated.y, sensors_data.imu.linear_acceleration_uncalibrated.z };
             av = {sensors_data.imu.angular_velocity_uncalibrated.x  * (M_PI/180), sensors_data.imu.angular_velocity_uncalibrated.y * (M_PI/180), sensors_data.imu.angular_velocity_uncalibrated.z * (M_PI/180)};
 
-            // Images from camera thread, swapped with NULL b/c different rates in IMU and image data.
+            // Images are swapped with NULL
             cv::Mat* img0 = camera_thread_.img0.exchange(nullptr);
             cv::Mat* img1 = camera_thread_.img1.exchange(nullptr);
 
@@ -155,6 +169,31 @@ protected:
               });
             }
 
+            u_cam_time = zedm->getTimestamp(TIME_REFERENCE::CURRENT);
+            int64_t s_cam_time = static_cast<int64_t>(u_cam_time);
+
+            cv::Mat* r = camera_thread_.rgb.exchange(nullptr);
+            cv::Mat* d = camera_thread_.depth.exchange(nullptr);
+
+            char* rgb = new char[720 * 1280];
+            short* depth = new short[720 * 1280];
+
+            if (r && d) {
+              //rgb = (char*) r->data;
+
+              for (int i = 0; i < 720; i++) {
+                for (int j = 0; j < 1280; j++) {
+                  depth = r->ptr<short*>(i)[j];
+                  rgb = d->ptr<char*>(i)[j];
+                }
+              }
+              _m_rgb_depth->put(new rgb_depth_type{
+              s_cam_time,
+              rgb,
+              depth,
+              });
+            }
+
             last_imu_ts = sensors_data.imu.timestamp;
         }
     }
@@ -166,6 +205,7 @@ private:
 
     switchboard* sb;
     std::unique_ptr<writer<imu_cam_type>> _m_imu_cam;
+    std::unique_ptr<writer<rgb_depth_type>> _m_rgb_depth;
 
     // IMU
     SensorsData sensors_data;
@@ -176,14 +216,13 @@ private:
     // Timestamps
     time_type t;
     ullong imu_time;
+    uint64_t u_cam_time;
 };
 
 // This line makes the plugin importable by Spindle
 PLUGIN_MAIN(zed);
 
-int main(int argc, char **argv) {
-    return 0;
-}
+int main(int argc, char **argv) { return 0; }
 
 /**
 * Conversion function between sl::Mat and cv::Mat
