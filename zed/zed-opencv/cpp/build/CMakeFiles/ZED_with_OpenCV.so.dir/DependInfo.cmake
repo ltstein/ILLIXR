@@ -6,7 +6,7 @@ set(CMAKE_DEPENDS_LANGUAGES
 set(CMAKE_DEPENDS_CHECK_CXX
   "/home/hyjale/ILLIXR/zed/zed-opencv/cpp/src/main.cpp" "/home/hyjale/ILLIXR/zed/zed-opencv/cpp/build/CMakeFiles/ZED_with_OpenCV.so.dir/src/main.o"
   )
-set(CMAKE_CXX_COMPILER_ID "GNU")
+set(CMAKE_CXX_COMPILER_ID "Clang")
 
 # The include file search paths:
 set(CMAKE_CXX_TARGET_INCLUDE_PATH

@@ -43,10 +43,10 @@ class camera_thread : public threadloop {
 public:
   camera_thread(std::shared_ptr<Camera> zedm_) : zedm{zedm_}
   {
-    // Image setup
-    runtime_parameters.sensing_mode = SENSING_MODE::STANDARD;
-    image_size = zedm->getCameraInformation().camera_resolution;
 
+    runtime_parameters.sensing_mode = SENSING_MODE::STANDARD;
+    // Image setup
+    image_size = zedm->getCameraInformation().camera_resolution;
     imageL_zed.alloc(image_size.width, image_size.height, MAT_TYPE::U8_C4, MEM::CPU);
     imageR_zed.alloc(image_size.width, image_size.height, MAT_TYPE::U8_C4, MEM::CPU);
     depth_image_zed.alloc(image_size.width, image_size.height, MAT_TYPE::U8_C4, MEM::CPU);
@@ -169,26 +169,16 @@ protected:
               });
             }
 
-            u_cam_time = zedm->getTimestamp(TIME_REFERENCE::IMAGE);
-            int64_t s_cam_time = static_cast<int64_t>(u_cam_time);
-
             cv::Mat* r = camera_thread_.rgb.exchange(nullptr);
             cv::Mat* d = camera_thread_.depth.exchange(nullptr);
+
+            u_cam_time = zedm->getTimestamp(TIME_REFERENCE::IMAGE);
+            int64_t s_cam_time = static_cast<int64_t>(u_cam_time);
 
             char* rgb = new char[720 * 1280];
             short* depth = new short[720 * 1280];
 
             if (r && d) {
-              // std::cout << r->isContinuous() << "rgb is continuous *********************************************************"<< std::endl;
-              // std::cout << d->isContinuous() << "depth is continuous ********************************************************" << std::endl;
-
-              // for (int i = 0; i < 720; i++) {
-              //   for (int j = 0; j < 1280; j++) {
-              //     rgb = r->ptr<char*>(i)[j];
-              //     depth = d->ptr<short*>(i)[j];
-              //   }
-              // }
-
               if (r->isContinuous()) {
                 rgb = (char*) r->data;
               }
