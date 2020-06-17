@@ -92,7 +92,8 @@ namespace ILLIXR {
 				// delete old;
 				/* TODO: (feature:allocate) Free old.*/
 				/* TODO: (optimization:free-list) return to free-list. */
-				int ret = _m_topic->_m_queue.enqueue(std::make_pair(_m_topic->_m_name, contents));
+				[[maybe_unused]] int ret = _m_topic->_m_queue.enqueue(std::make_pair(_m_topic->_m_name, contents));
+				// Unused if the assert is not on.
 				assert(ret);
 			}
 

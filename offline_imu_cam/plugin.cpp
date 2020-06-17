@@ -20,11 +20,11 @@ public:
 	{ }
 
 protected:
-	virtual skip_option should_skip() override {
+	virtual skip_option _p_should_skip() override {
 		if (_m_sensor_data_it != _m_sensor_data.end()) {
 			dataset_now = _m_sensor_data_it->first;
 			reliable_sleep(std::chrono::nanoseconds{dataset_now - dataset_first_time} + real_first_time);
-			real_target_time = real_first_time + std::chrono::nanoseconds{dataset_now - dataset_first_time};
+			real_now = real_first_time + std::chrono::nanoseconds{dataset_now - dataset_first_time};
 			return skip_option::run;
 		} else {
 			stop();
@@ -40,7 +40,7 @@ protected:
 		const sensor_types& sensor_datum = _m_sensor_data_it->second;
 		if (sensor_datum.imu0) {
 			_m_imu_cam->put(new imu_cam_type{
-				real_target_time,
+				real_now,
 				(sensor_datum.imu0.value().angular_v).cast<float>(),
 				(sensor_datum.imu0.value().linear_a).cast<float>(),
 				sensor_datum.cam0
@@ -74,7 +74,7 @@ private:
 	ullong dataset_first_time;
 	time_type real_first_time;
 	ullong dataset_now;
-	type_type real_target_time;
+	time_type real_now;
 };
 
 PLUGIN_MAIN(offline_imu_cam)

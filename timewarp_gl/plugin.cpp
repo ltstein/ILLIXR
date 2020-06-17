@@ -266,13 +266,15 @@ private:
 
 public:
 
-	virtual skip_option should_skip() override {
+	virtual skip_option _p_should_skip() override {
 		// Sleep for approximately 90% of the time until the next vsync.
 		// Scheduling granularity can't be assumed to be super accurate here,
 		// so don't push your luck (i.e. don't wait too long....) Tradeoff with
 		// MTP here. More you wait, closer to the display sync you sample the pose.
 
-		reliable_sleep(std::chrono::high_resolution_clock::now() + std::chrono::duration<double>(EstimateTimeToSleep(DELAY_FRACTION)));
+		reliable_sleep(
+					   std::chrono::high_resolution_clock::now() +
+					   std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(EstimateTimeToSleep(DELAY_FRACTION))));
 		return skip_option::run;
 	}
 
@@ -560,7 +562,7 @@ public:
 		}
 		// get the query result
 		glGetQueryObjectui64v(query, GL_QUERY_RESULT, &elapsed_time);
-		printf("cpu_timer,timewarp_gl_gpu,%llu\n", elapsed_time);
+		printf("cpu_timer,timewarp_gl_gpu,%lu\n", elapsed_time);
 
 		// Call Hologram
 		auto hologram_params = new hologram_input;
