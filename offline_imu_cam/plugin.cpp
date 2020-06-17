@@ -6,7 +6,7 @@
 
 using namespace ILLIXR;
 
-const std::string data_path = "/home/hyjale/ILLIXR_test/ILLIXR/data1/";
+const std::string data_path = "data1/";
 
 class offline_imu_cam : public ILLIXR::threadloop {
 public:
@@ -58,7 +58,6 @@ protected:
 
 public:
 	virtual void start() override {
-		assert(0);
 		// this is not done in the constructor, because I want it to
 		// be done at thread-launch time, not load-time.
 		real_first_time = std::chrono::system_clock::now();
