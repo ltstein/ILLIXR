@@ -1,0 +1,3 @@
+CUDA failed after sychronization:
+cannot set while device is active in this process
+on line: 779

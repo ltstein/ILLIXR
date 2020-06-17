@@ -502,6 +502,11 @@ public:
 
 		glBindVertexArray(tw_vao);
 
+		GLuint query;
+		GLuint64 elapsed_time;
+		int done = 0;
+		glGenQueries(1, &query);
+		glBeginQuery(GL_TIME_ELAPSED,query);
 		// Loop over each eye.
 		for(int eye = 0; eye < HMD::NUM_EYES; eye++){
 
@@ -547,6 +552,16 @@ public:
 			// with the UV and position buffers correctly offset.
 			glDrawElements(GL_TRIANGLES, num_distortion_indices, GL_UNSIGNED_INT, (void*)0);
 		}
+
+		glEndQuery(GL_TIME_ELAPSED);
+		// retrieving the recorded elapsed time
+		// wait until the query result is available
+		while (!done) {
+    	glGetQueryObjectiv(query, GL_QUERY_RESULT_AVAILABLE, &done);
+		}
+		// get the query result
+		glGetQueryObjectui64v(query, GL_QUERY_RESULT, &elapsed_time);
+		printf("cpu_timer,timewarp_gl_gpu,%llu\n", elapsed_time);
 
 		// Call Hologram
 		auto hologram_params = new hologram_input;

@@ -37,7 +37,13 @@ namespace ILLIXR {
 	} imu_cam_type;
 
 	typedef struct {
-		time_type time; 
+	  int64_t time;
+	  char* rgb;
+	  short* depth;
+	} rgb_depth_type;
+
+	typedef struct {
+		time_type time;
 		Eigen::Vector3f position;
 		Eigen::Quaternionf orientation;
 	} pose_type;
@@ -51,7 +57,7 @@ namespace ILLIXR {
 	struct rendered_frame {
 		GLuint texture_handle;
 		pose_type render_pose; // The pose used when rendering this frame.
-		std::chrono::time_point<std::chrono::system_clock> sample_time; 
+		std::chrono::time_point<std::chrono::system_clock> sample_time;
 	};
 
 	// Using arrays as a swapchain
@@ -61,7 +67,7 @@ namespace ILLIXR {
 		GLuint texture_handles[2]; // Does not change between swaps in swapchain
 		GLuint swap_indices[2]; // Which element of the swapchain
 		pose_type render_pose; // The pose used when rendering this frame.
-		std::chrono::time_point<std::chrono::system_clock> sample_time; 
+		std::chrono::time_point<std::chrono::system_clock> sample_time;
 	};
 
 	typedef struct {

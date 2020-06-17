@@ -92,12 +92,8 @@ namespace ILLIXR {
 				// delete old;
 				/* TODO: (feature:allocate) Free old.*/
 				/* TODO: (optimization:free-list) return to free-list. */
-
-				assert((
-					_m_topic->_m_queue.enqueue(
-						std::make_pair(_m_topic->_m_name, contents)
-					)
-				));
+				int ret = _m_topic->_m_queue.enqueue(std::make_pair(_m_topic->_m_name, contents));
+				assert(ret);
 			}
 
 			topic_writer(topic* topic) : _m_topic{topic} {
