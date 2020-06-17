@@ -33,7 +33,6 @@ thread_cpu_time() {
     return cpp_clock_gettime(CLOCK_THREAD_CPUTIME_ID);
 }
 
-
 /**
  * @brief a timer that times until the end of the code block ([RAII]).
  *
@@ -61,12 +60,12 @@ thread_cpu_time() {
  */
 template <
     typename now_fn,
-    typename time_point = typename std::result_of<now_fn()>::type,
-    typename duration = typename time_point::duration
+    typename time_point = decltype(std::declval<now_fn>()()),
+    typename durationt = decltype(std::declval<time_point>() - std::declval<time_point>())
     >
 class timer {
 public:
-    timer(const now_fn& now, duration& _duration)
+    timer(const now_fn& now, durationt& _duration)
         : _p_now{now} , _p_duration{_duration} {
         _p_start = _p_now();
     }
@@ -77,9 +76,25 @@ public:
 
 private:
     const now_fn& _p_now;
-    duration& _p_duration;
+    durationt& _p_duration;
     time_point _p_start;
 };
+
+template <typename Duration, typename Out = decltype(std::declval<Duration>().count())>
+typename std::enable_if<std::is_integral<Out>::value, Out>::type
+count_duration(Duration t) {
+	return std::chrono::duration_cast<
+		std::chrono::nanoseconds,
+		typename Duration::rep,
+		typename Duration::period
+		>(t).count();
+}
+
+template <typename Duration>
+typename std::enable_if<std::is_integral<Duration>::value, Duration>::type
+count_duration(Duration t) {
+	return t;
+}
 
 /**
  * @brief Like timer, but prints the output.
@@ -89,8 +104,8 @@ private:
  */
 template <
     typename now_fn,
-    typename time_point = typename std::result_of<now_fn()>::type,
-    typename duration = typename time_point::duration
+    typename time_point = decltype(std::declval<now_fn>()()),
+    typename duration = decltype(std::declval<time_point>() - std::declval<time_point>())
     >
 class print_timer {
 public:
@@ -103,8 +118,7 @@ private:
         { }
         ~print_in_destructor() {
             std::ostringstream os;
-            // If we did have C++20, we could remove count(), and this would become more general.
-            os << "cpu_timer," << _p_account_name << "," << _p_duration.count() <<  "\n";
+            os << "cpu_timer," << _p_account_name << "," << count_duration<duration>(_p_duration) << "\n";
             std::cout << os.str() << std::flush;
         }
     private:

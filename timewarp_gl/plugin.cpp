@@ -266,20 +266,19 @@ private:
 
 public:
 
-	void _p_one_iteration() override {
-		{
-			using namespace std::chrono_literals;
-			// Sleep for approximately 90% of the time until the next vsync.
-			// Scheduling granularity can't be assumed to be super accurate here,
-			// so don't push your luck (i.e. don't wait too long....) Tradeoff with
-			// MTP here. More you wait, closer to the display sync you sample the pose.
+	virtual skip_option should_skip() override {
+		// Sleep for approximately 90% of the time until the next vsync.
+		// Scheduling granularity can't be assumed to be super accurate here,
+		// so don't push your luck (i.e. don't wait too long....) Tradeoff with
+		// MTP here. More you wait, closer to the display sync you sample the pose.
 
-			// TODO: use more precise sleep.
+		reliable_sleep(std::chrono::high_resolution_clock::now() + std::chrono::duration<double>(EstimateTimeToSleep(DELAY_FRACTION)));
+		return skip_option::run;
+	}
 
-			// TODO: poll GLX window events
-			std::this_thread::sleep_for(std::chrono::duration<double>(EstimateTimeToSleep(DELAY_FRACTION)));
-			warp(glfwGetTime());
-		}
+	virtual void _p_one_iteration() override {
+		// TODO: poll GLX window events
+		warp(glfwGetTime());
 	}
 	/* compatibility interface */
 
