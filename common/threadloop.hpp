@@ -27,7 +27,11 @@ public:
 	void start() override {
 		_m_thread = std::thread([this]() {
 			while (!should_terminate()) {
-				switch (_p_should_skip()) {
+				{
+					PRINT_CPU_TIME_FOR_THIS_BLOCK(get_name() + "_should_skip");
+					auto s = _p_should_skip();
+				}
+				switch (s) {
 				// Curly braces after each block for safety :)
 				case skip_option::run: {
 					PRINT_CPU_TIME_FOR_THIS_BLOCK(get_name());

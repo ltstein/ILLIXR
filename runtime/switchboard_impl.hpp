@@ -232,10 +232,13 @@ namespace ILLIXR {
 			  - Calls invoke_callback, which acquires _m_callbacks_lock, (see its proof of thread-safety).
 			  Therefore this method is thread-safe.
 			 */
+			std::unique_ptr<print_timer<decltype((thread_cpu_time))>> timer =
+			std::make_unique<print_timer<decltype((thread_cpu_time))>>("swichboard_check_queues", thread_cpu_time);
 			while (!_m_terminate.load()) {
 				std::pair<std::string, const void*> t;
 				if (_m_queue.try_dequeue(t)) {
 					const std::lock_guard lock{_m_registry_lock};
+					timer.exchange(std::make_unique<print_timer<decltype((thread_cpu_time))>>("swichboard_check_queues", thread_cpu_time));
 					_m_registry.at(t.first).invoke_callbacks(t.second);
 				}
 			}
