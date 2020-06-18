@@ -272,9 +272,7 @@ public:
 		// so don't push your luck (i.e. don't wait too long....) Tradeoff with
 		// MTP here. More you wait, closer to the display sync you sample the pose.
 
-		reliable_sleep(
-					   std::chrono::high_resolution_clock::now() +
-					   std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(EstimateTimeToSleep(DELAY_FRACTION))));
+		std::this_thread::sleep_for(std::chrono::duration<double>(EstimateTimeToSleep(DELAY_FRACTION)));
 		return skip_option::run;
 	}
 
