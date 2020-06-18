@@ -573,12 +573,13 @@ public:
 		lastSwapTime = glfwGetTime();
 		averageFramerate = (RUNNING_AVG_ALPHA * (1.0 /(lastSwapTime - lastFrameTime))) + (1.0 - RUNNING_AVG_ALPHA) * averageFramerate;
 
+#ifndef DNDEBUG
 		printf("\033[1;36m[TIMEWARP]\033[0m Motion-to-display latency: %.1f ms, Exponential Average FPS: %.3f\n", (float)(lastSwapTime - warpStart) * 1000.0f, (float)(averageFramerate));
-
-
 		if(DISPLAY_REFRESH_RATE - averageFramerate > FPS_WARNING_TOLERANCE){
 			printf("\033[1;36m[TIMEWARP]\033[0m \033[1;33m[WARNING]\033[0m Timewarp thread running slow!\n");
 		}
+#endif
+
 		lastFrameTime = glfwGetTime();
 
 	}
