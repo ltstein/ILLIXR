@@ -14,11 +14,7 @@ using namespace ILLIXR;
 
 cv::Mat slMat2cvMat(Mat& input);
 
-class camerastart {
-public:
-  camerastart() { }
-
-  std::shared_ptr<Camera> start_camera() {
+std::shared_ptr<Camera> start_camera() {
     std::shared_ptr<Camera> zedm = std::make_shared<Camera>();
 
     // Cam setup
@@ -37,11 +33,10 @@ public:
 
     return zedm;
   }
-};
 
-class camera_thread : public threadloop {
+class zed_camera_thread : public threadloop {
 public:
-  camera_thread(std::string name_, phonebook* pb_, std::shared_ptr<Camera> zedm_)
+  zed_camera_thread(std::string name_, phonebook* pb_, std::shared_ptr<Camera> zedm_)
   : threadloop{name_, pb_}
   , zedm{zedm_}
   {
@@ -65,8 +60,15 @@ public:
   std::atomic<cv::Mat*> depth;
 
 protected:
+	virtual skip_option _p_should_skip() override {
+		if (zedm->grab(runtime_parameters) == ERROR_CODE::SUCCESS) {
+			return skip_option::run;
+		} else {
+			return skip_option::skip_and_yield;
+		}
+	}
+
   virtual void _p_one_iteration() override {
-    if (zedm->grab(runtime_parameters) == ERROR_CODE::SUCCESS) {
 
       // Retrieve images
       zedm->retrieveImage(imageL_zed, VIEW::LEFT, MEM::CPU, image_size);
@@ -82,7 +84,6 @@ protected:
 
       rgb = &imageL_ocv;
       depth = &depth_image_ocv;
-    }
   }
 
 private:
@@ -104,35 +105,42 @@ private:
   cv::Mat depth_image_ocv;
 };
 
-class zed : public threadloop {
+class zed_imu_thread : public threadloop {
 public:
     // Public constructor, Spindle passes the phonebook to this
     // constructor. In turn, the constructor fills in the private
     // references to the switchboard plugs, so the plugin can read
     // the data whenever it needs to.
-    zed(std::string name_, phonebook* pb_)
+    zed_imu_thread(std::string name_, phonebook* pb_)
         : threadloop{name_, pb_}
         , sb{pb->lookup_impl<switchboard>()}
         , _m_imu_cam{sb->publish<imu_cam_type>("imu_cam")}
         , _m_rgb_depth{sb->publish<rgb_depth_type>("rgb_depth")}
-        , zedm{camerastart_.start_camera()}
-        , camera_thread_{name_, pb_, zedm}
+        , zedm{start_camera()}
+        , camera_thread_{"zed_camera_thread", pb_, zedm}
     {
       camera_thread_.start();
     }
 
-    // deconstructor
+    // destructor
     virtual ~zed() override {
         zedm->close();
     }
 
 
 protected:
+	virtual skip_option should_skip() override {
+		if (sensors_data.imu.timestamp > last_imu_ts) {
+			return skip_option::run;
+		} else {
+			return skip_option::skip_and_spin;
+		}
+	}
+
     // a continuous loop
     virtual void _p_one_iteration() override {
         zedm->getSensorsData(sensors_data, TIME_REFERENCE::CURRENT);
 
-        if (sensors_data.imu.timestamp > last_imu_ts) {
 
             // Time as ullong (nanoseconds)
             imu_time = static_cast<ullong>(sensors_data.imu.timestamp.getNanoseconds());
@@ -197,13 +205,11 @@ protected:
             }
 
             last_imu_ts = sensors_data.imu.timestamp;
-        }
     }
 
 private:
     std::shared_ptr<Camera> zedm;
-    camera_thread camera_thread_;
-    camerastart camerastart_;
+    zed_camera_thread camera_thread_;
 
     const std::shared_ptr<switchboard> sb;
     std::unique_ptr<writer<imu_cam_type>> _m_imu_cam;
@@ -224,7 +230,6 @@ private:
 // This line makes the plugin importable by Spindle
 PLUGIN_MAIN(zed);
 
-int main(int argc, char **argv) { return 0; }
 
 /**
 * Conversion function between sl::Mat and cv::Mat
