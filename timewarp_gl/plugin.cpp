@@ -406,6 +406,7 @@ public:
 		auto most_recent_frame = _m_eyebuffer->get_latest_ro();
 		if(!most_recent_frame){
 			//std::cerr << "ATW failed to grab most recent frame from Switchboard" << std::endl;
+			printf("cpu_timer,timewarp_gl_gpu_bailed,0\n");
 			return;
 		}
 
