@@ -6,7 +6,7 @@
 
 using namespace ILLIXR;
 
-const std::string data_path = "data1/";
+const std::string data_path = "/home/hyjale/ILLIXR_test/ILLIXR/data1/";
 
 class offline_imu_cam : public ILLIXR::threadloop {
 public:

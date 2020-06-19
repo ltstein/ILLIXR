@@ -47,7 +47,7 @@ CMAKE_BACKWARDS_COMPATIBILITY:STRING=2.4
 
 //Choose the type of build, options are: None Debug Release RelWithDebInfo
 // MinSizeRel ...
-CMAKE_BUILD_TYPE:STRING=
+CMAKE_BUILD_TYPE:STRING=Release
 
 //Enable/Disable color output during build.
 CMAKE_COLOR_MAKEFILE:BOOL=ON
@@ -376,6 +376,9 @@ CUDA_nvToolsExt_LIBRARY:FILEPATH=/usr/local/cuda/lib64/libnvToolsExt.so
 
 //Path to a library.
 CUDA_rt_LIBRARY:FILEPATH=/usr/lib/x86_64-linux-gnu/librt.so
+
+//No help, variable specified on the command line.
+DNDEBUG:UNINITIALIZED=1
 
 //Single output directory for building all executables.
 EXECUTABLE_OUTPUT_PATH:PATH=

@@ -20,7 +20,13 @@ std::shared_ptr<Camera> start_camera() {
     // Cam setup
     InitParameters init_params;
     init_params.camera_resolution = RESOLUTION::HD720;
-    init_params.depth_mode = DEPTH_MODE::ULTRA;
+
+    // init_params.depth_mode = DEPTH_MODE::PERFORMANCE;
+    init_params.depth_mode = DEPTH_MODE::NONE;
+    init_params.camera_disable_self_calib = false;
+    init_params.depth_stabilization = false;
+    init_params.enable_image_enhancement = false;
+
     init_params.coordinate_units = UNIT::METER;
     init_params.coordinate_system = COORDINATE_SYSTEM::RIGHT_HANDED_Z_UP_X_FWD; // Coordinate system used in ROS
 
@@ -40,16 +46,18 @@ public:
   : threadloop{name_, pb_}
   , zedm{zedm_}
   {
-    runtime_parameters.sensing_mode = SENSING_MODE::STANDARD;
+    // runtime_parameters.sensing_mode = SENSING_MODE::STANDARD;
+    runtime_parameters.sensing_mode = SENSING_MODE::LAST;
+    runtime_parameters.enable_depth = false;
     // Image setup
     image_size = zedm->getCameraInformation().camera_resolution;
     imageL_zed.alloc(image_size.width, image_size.height, MAT_TYPE::U8_C4, MEM::CPU);
     imageR_zed.alloc(image_size.width, image_size.height, MAT_TYPE::U8_C4, MEM::CPU);
-    depth_image_zed.alloc(image_size.width, image_size.height, MAT_TYPE::U8_C4, MEM::CPU);
+    // depth_image_zed.alloc(image_size.width, image_size.height, MAT_TYPE::U8_C4, MEM::CPU);
 
     imageL_ocv = slMat2cvMat(imageL_zed);
     imageR_ocv = slMat2cvMat(imageR_zed);
-    depth_image_ocv = slMat2cvMat(depth_image_zed);
+    // depth_image_ocv = slMat2cvMat(depth_image_zed);
   }
 
   // for imu-cam
@@ -61,19 +69,19 @@ public:
 
 protected:
 	virtual skip_option _p_should_skip() override {
+
 		if (zedm->grab(runtime_parameters) == ERROR_CODE::SUCCESS) {
 			return skip_option::run;
 		} else {
-			return skip_option::skip_and_yield;
+			return skip_option::skip_and_spin;
 		}
 	}
 
   virtual void _p_one_iteration() override {
-
       // Retrieve images
       zedm->retrieveImage(imageL_zed, VIEW::LEFT, MEM::CPU, image_size);
       zedm->retrieveImage(imageR_zed, VIEW::RIGHT, MEM::CPU, image_size);
-      zedm->retrieveImage(depth_image_zed, VIEW::DEPTH, MEM::CPU, image_size);
+      //zedm->retrieveImage(depth_image_zed, VIEW::DEPTH, MEM::CPU, image_size);
 
       // Convert to Grayscale
       cv::cvtColor(imageL_ocv, grayL, CV_BGR2GRAY);
@@ -82,8 +90,9 @@ protected:
       img0 = &grayL;
       img1 = &grayR;
 
-      rgb = &imageL_ocv;
-      depth = &depth_image_ocv;
+      // rgb = &imageL_ocv;
+      // depth = &depth_image_ocv;
+      assert(img0.load() && img1.load());
   }
 
 private:
@@ -115,7 +124,7 @@ public:
         : threadloop{name_, pb_}
         , sb{pb->lookup_impl<switchboard>()}
         , _m_imu_cam{sb->publish<imu_cam_type>("imu_cam")}
-        , _m_rgb_depth{sb->publish<rgb_depth_type>("rgb_depth")}
+        //, _m_rgb_depth{sb->publish<rgb_depth_type>("rgb_depth")}
         , zedm{start_camera()}
         , camera_thread_{"zed_camera_thread", pb_, zedm}
     {
@@ -123,14 +132,15 @@ public:
     }
 
     // destructor
-    virtual ~zed() override {
+    virtual ~zed_imu_thread() override {
         zedm->close();
     }
 
 
 protected:
-	virtual skip_option should_skip() override {
-		if (sensors_data.imu.timestamp > last_imu_ts) {
+	virtual skip_option _p_should_skip() override {
+    zedm->getSensorsData(sensors_data, TIME_REFERENCE::CURRENT);
+    if (sensors_data.imu.timestamp > last_imu_ts) {
 			return skip_option::run;
 		} else {
 			return skip_option::skip_and_spin;
@@ -139,8 +149,6 @@ protected:
 
     // a continuous loop
     virtual void _p_one_iteration() override {
-        zedm->getSensorsData(sensors_data, TIME_REFERENCE::CURRENT);
-
 
             // Time as ullong (nanoseconds)
             imu_time = static_cast<ullong>(sensors_data.imu.timestamp.getNanoseconds());
@@ -158,7 +166,6 @@ protected:
             // Images are swapped with NULL
             cv::Mat* img0 = camera_thread_.img0.exchange(nullptr);
             cv::Mat* img1 = camera_thread_.img1.exchange(nullptr);
-
             if (img0 && img1) {
               _m_imu_cam->put(new imu_cam_type{
               t,
@@ -179,30 +186,42 @@ protected:
               });
             }
 
-            cv::Mat* r = camera_thread_.rgb.exchange(nullptr);
-            cv::Mat* d = camera_thread_.depth.exchange(nullptr);
-
-            u_cam_time = zedm->getTimestamp(TIME_REFERENCE::IMAGE);
-            int64_t s_cam_time = static_cast<int64_t>(u_cam_time);
-
-            char* rgb = new char[720 * 1280];
-            short* depth = new short[720 * 1280];
-
-            if (r && d) {
-              if (r->isContinuous()) {
-                rgb = (char*) r->data;
-              }
-
-              if (d->isContinuous()) {
-                depth = (short*) d->data;
-              }
-
-              _m_rgb_depth->put(new rgb_depth_type{
-              s_cam_time,
-              rgb,
-              depth,
-              });
-            }
+            // cv::Mat* r = camera_thread_.rgb.exchange(nullptr);
+            // cv::Mat* d = camera_thread_.depth.exchange(nullptr);
+            //
+            // u_cam_time = zedm->getTimestamp(TIME_REFERENCE::IMAGE);
+            // int64_t s_cam_time = static_cast<int64_t>(u_cam_time);
+            //
+            // unsigned char* rgb = new unsigned char[720 * 1280 * 15];
+            // unsigned short* depth = new unsigned short[720 * 1280 * 5];
+            //
+            // if (r && d) {
+            //   for (int i = 0; i < 1280; i++) {
+            //     for (int j = 0; j < 720; j++) {
+            //       rgb[i * 1280 + j] = 0;//r->ptr<unsigned char>(i)[j];
+            //       depth[i * 1280 + j] = 0;//d->ptr<unsigned short>(i)[j];
+            //     }
+            //   }
+            //
+            //   if (r->isContinuous()) {
+            //     rgb = (unsigned char*) r->data;
+            //   }
+            //
+            //   if (d->isContinuous()) {
+            //     depth = (unsigned short*) d->data;
+            //   }
+            //
+            //   for (int i = 0; i < (1280*720*30); i++) {
+            //       rgb[i] = 1;//r->ptr<unsigned char>(i)[j];
+            //       depth[i] = 1;//d->ptr<unsigned short>(i)[j];
+            //   }
+            //
+            //   _m_rgb_depth->put(new rgb_depth_type{
+            //   s_cam_time,
+            //   rgb,
+            //   depth,
+            //   });
+            // }
 
             last_imu_ts = sensors_data.imu.timestamp;
     }
@@ -230,6 +249,7 @@ private:
 // This line makes the plugin importable by Spindle
 PLUGIN_MAIN(zed_imu_thread);
 
+int main(int argc, char **argv) { return 0; }
 
 /**
 * Conversion function between sl::Mat and cv::Mat

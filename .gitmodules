@@ -10,3 +10,6 @@
 [submodule "audio_pipeline"]
 	path = audio_pipeline
 	url = https://github.com/ILLIXR/audio_pipeline.git
+[submodule "ElasticFusion"]
+	path = ElasticFusion
+	url = https://github.com/ILLIXR/ElasticFusion.git

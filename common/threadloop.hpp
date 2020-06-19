@@ -27,9 +27,10 @@ public:
 	void start() override {
 		_m_thread = std::thread([this]() {
 			while (!should_terminate()) {
+				skip_option s;
 				{
 					PRINT_CPU_TIME_FOR_THIS_BLOCK(get_name() + "_should_skip");
-					auto s = _p_should_skip();
+					s = _p_should_skip();
 				}
 				switch (s) {
 				// Curly braces after each block for safety :)
@@ -67,7 +68,7 @@ public:
 	}
 
 protected:
- 
+
 	enum class skip_option {
 		/// Run iteration NOW. Only then does CPU timer begin counting.
 		run,
