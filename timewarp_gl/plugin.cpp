@@ -1,6 +1,7 @@
 #include <chrono>
 #include <future>
 #include <iostream>
+#include <ratio>
 #include <thread>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -18,6 +19,7 @@
 
 using namespace ILLIXR;
 using namespace linalg::aliases;
+typedef microseconds_double = std::chrono::duration<double, std::ratio<1>>;
 
 typedef void (*glXSwapIntervalEXTProc)(Display *dpy, GLXDrawable drawable, int interval);
 
@@ -120,6 +122,9 @@ private:
 
 	// Hologram call data
 	long long _hologram_seq{0};
+
+	double glfw_base_time;
+	microseconds_double real_base_time;
 
 	void BuildTimewarp(HMD::hmd_info_t* hmdInfo){
 
@@ -384,6 +389,9 @@ public:
 
 		glXMakeCurrent(xwin->dpy, None, NULL);
 
+		glfw_base_time = glfwGetTime();
+		real_base_time = std::chrono::system_clock::now();
+
 		lastSwapTime = glfwGetTime();
 
 		threadloop::start();
@@ -554,6 +562,9 @@ public:
 			glDrawElements(GL_TRIANGLES, num_distortion_indices, GL_UNSIGNED_INT, (void*)0);
 		}
 
+		GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+		glWaitSync(fence, 0, GL_TIMEOUT_IGNORED);
+
 		glEndQuery(GL_TIME_ELAPSED);
 		// retrieving the recorded elapsed time
 		// wait until the query result is available
@@ -576,7 +587,10 @@ public:
 		averageFramerate = (RUNNING_AVG_ALPHA * (1.0 /(lastSwapTime - lastFrameTime))) + (1.0 - RUNNING_AVG_ALPHA) * averageFramerate;
 
 #ifndef DNDEBUG
-		printf("\033[1;36m[TIMEWARP]\033[0m Motion-to-display latency: %.1f ms, Exponential Average FPS: %.3f\n", (float)(lastSwapTime - warpStart) * 1000.0f, (float)(averageFramerate));
+
+		microseconds_double m2p = microseconds_double{(lastSwapTime - glfw_base_time) * 1000.0} + real_base_time - std::chrono::duration_cast<microseconds_double>(last_pose.time);
+		printf("\033[1;36m[TIMEWARP]\033[0m Motion-to-display latency: %.1f ms, Exponential Average FPS: %.3f\n",
+		       m2p.count(), averageFramerate);
 		if(DISPLAY_REFRESH_RATE - averageFramerate > FPS_WARNING_TOLERANCE){
 			printf("\033[1;36m[TIMEWARP]\033[0m \033[1;33m[WARNING]\033[0m Timewarp thread running slow!\n");
 		}
