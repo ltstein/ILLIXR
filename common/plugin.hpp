@@ -19,16 +19,30 @@ namespace ILLIXR {
 		 *
 		 * There is no `stop()` because destructor should be considered analagous.
 		 */
-		virtual void start() { }
+		virtual void start() { };
+
+		const std::string& get_name() { return name; }
+
+		plugin(const std::string& name_, phonebook* pb_)
+			: pb{pb_}
+			, name{name_}
+		{ }
+
 		virtual ~plugin() { }
+
+	protected:
+		const phonebook* pb;
+
+	private:
+		const std::string name;
 	};
 
-#define PLUGIN_MAIN(plugin_class) \
-	extern "C" plugin* plugin_main(phonebook* pb) {					 \
-		plugin_class* obj = new plugin_class {pb};					 \
-		obj->start();												 \
-		return obj;													 \
-	}
+#define PLUGIN_MAIN(plugin_class)                                    \
+    extern "C" plugin* plugin_main(phonebook* pb) {                  \
+        plugin_class* obj = new plugin_class {#plugin_class, pb};    \
+        obj->start();                                                \
+        return obj;                                                  \
+    }
 }
 
 #endif

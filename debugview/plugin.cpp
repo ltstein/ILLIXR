@@ -11,7 +11,7 @@
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
-#include "common/plugin.hpp"
+#include "common/threadloop.hpp"
 #include "common/switchboard.hpp"
 #include "common/data_format.hpp"
 #include "common/shader_util.hpp"
@@ -49,15 +49,16 @@ Eigen::Matrix4f lookAt(Eigen::Vector3f eye, Eigen::Vector3f target, Eigen::Vecto
 
 }
 
-class debugview : public plugin {
+class debugview : public threadloop {
 public:
 
 	// Public constructor, Spindle passes the phonebook to this
 	// constructor. In turn, the constructor fills in the private
 	// references to the switchboard plugs, so the plugin can read
 	// the data whenever it needs to.
-	debugview(const phonebook *pb)
-		: sb{pb->lookup_impl<switchboard>()}
+	debugview(std::string name_, phonebook *pb_)
+		: threadloop{name_, pb_}
+		, sb{pb->lookup_impl<switchboard>()}
 		, pp{pb->lookup_impl<pose_prediction>()}
 		, _m_slow_pose{sb->get_reader<pose_type>("slow_pose")}
 		//, glfw_context{pb->lookup_impl<global_config>()->glfw_context}
@@ -143,17 +144,24 @@ public:
 			}
 			ImGui::SameLine();
 			ImGui::Text("Resets to zero'd out tracking universe");
+
+			if(ImGui::Button("Zero orientation")){
+				const pose_type fast_pose = pp->get_fast_pose();
+				if (pp->fast_pose_reliable()) {
+					// Can only zero if fast_pose is valid
+					pp->set_offset(fast_pose.orientation);
+				}
+			}
+			ImGui::SameLine();
+			ImGui::Text("Resets to zero'd out tracking universe");
 		}
 		ImGui::Spacing();
-
-		const pose_type fast_pose = pp->get_fast_pose();
-		const ptr<const pose_type> slow_pose_ptr = _m_slow_pose.get_latest_ro_nullable();
-		const pose_type true_pose = pp->get_fast_true_pose();
 		ImGui::Text("Switchboard connection status:");
 		ImGui::Text("Fast pose topic:");
 		ImGui::SameLine();
 
-		if(true /*fast_pose is valid*/) {
+		if(pp->fast_pose_reliable()) {
+			const pose_type fast_pose = pp->get_fast_pose();
 			ImGui::TextColored(ImVec4(0.0, 1.0, 0.0, 1.0), "Valid fast pose pointer");
 			ImGui::Text("Fast pose position (XYZ):\n  (%f, %f, %f)", fast_pose.position.x(), fast_pose.position.y(), fast_pose.position.z());
 			ImGui::Text("Fast pose quaternion (XYZW):\n  (%f, %f, %f, %f)", fast_pose.orientation.x(), fast_pose.orientation.y(), fast_pose.orientation.z(), fast_pose.orientation.w());
@@ -164,6 +172,7 @@ public:
 		ImGui::Text("Slow pose topic:");
 		ImGui::SameLine();
 
+		ptr<const pose_type> slow_pose_ptr = _m_slow_pose.get_latest_ro_nullable();
 		if(slow_pose_ptr){
 			ImGui::TextColored(ImVec4(0.0, 1.0, 0.0, 1.0), "Valid slow pose pointer");
 			ImGui::Text("Slow pose position (XYZ):\n  (%f, %f, %f)", slow_pose_ptr->position.x(), slow_pose_ptr->position.y(), slow_pose_ptr->position.z());
@@ -175,7 +184,8 @@ public:
 		ImGui::Text("GROUND TRUTH pose topic:");
 		ImGui::SameLine();
 
-		if (true /*true_pose is valid*/) {
+		if (pp->true_pose_reliable()) {
+			const pose_type true_pose = pp->get_true_pose();
 			ImGui::TextColored(ImVec4(0.0, 1.0, 0.0, 1.0), "Valid ground truth pose pointer");
 			ImGui::Text("Ground truth position (XYZ):\n  (%f, %f, %f)", true_pose.position.x(), true_pose.position.y(), true_pose.position.z());
 			ImGui::Text("Ground truth quaternion (XYZW):\n  (%f, %f, %f, %f)", true_pose.orientation.x(), true_pose.orientation.y(), true_pose.orientation.z(), true_pose.orientation.w());
@@ -280,12 +290,15 @@ public:
 
 	
 
-	void main_loop() {
-		double lastTime = glfwGetTime();
-		glfwMakeContextCurrent(gui_window);
-		
-		while (!_m_terminate.load()) {
-
+	bool first_iteration = true;
+	void _p_one_iteration() override {
+		if (first_iteration) {
+			// Note: glfwMakeContextCurrent must be called from the thread which will be using it.
+			// Therefore, I use this first_iteration variable, which I unset immediately after.
+			glfwMakeContextCurrent(gui_window);
+			first_iteration = false;
+		}
+		{
 			glfwPollEvents();
 
 			if (glfwGetMouseButton(gui_window, GLFW_MOUSE_BUTTON_LEFT)) 
@@ -313,15 +326,10 @@ public:
 
 			glUseProgram(demoShaderProgram);
 
-			const pose_type pose = pp->get_fast_pose();
-
 			Eigen::Matrix4f headsetPose = Eigen::Matrix4f::Identity();
-			Eigen::Matrix4f headsetPosition = Eigen::Matrix4f::Identity();
 
-			
-
-			if(true /*pose is valid*/) {
-				// We have a valid pose from our Switchboard plug.
+			if(pp->fast_pose_reliable()) {
+				const pose_type pose = pp->get_fast_pose();
 
 				if(counter == 100){
 					std::cerr << "First pose received: quat(wxyz) is " << pose.orientation.w() << ", " << pose.orientation.x() << ", " << pose.orientation.y() << ", " << pose.orientation.z() << std::endl;
@@ -336,7 +344,10 @@ public:
 			Eigen::Matrix4f modelMatrix = Eigen::Matrix4f::Identity();
 
 			// If we are following the headset, and have a valid pose, apply the optional offset.
-			Eigen::Vector3f optionalOffset = (follow_headset) ? (pose.position + tracking_position_offset) : Eigen::Vector3f{0.0f,0.0f,0.0f};
+			Eigen::Vector3f optionalOffset = (follow_headset && pp->fast_pose_reliable())
+				? (pp->get_fast_pose().position + tracking_position_offset)
+				: Eigen::Vector3f{0.0f,0.0f,0.0f}
+			;
 
 			Eigen::Matrix4f userView = lookAt(Eigen::Vector3f{(float)(view_dist * cos(view_euler.y())),
 															  (float)(view_dist * sin(view_euler.x())), 
@@ -377,8 +388,8 @@ public:
 			headsetObject.color = {0.2,0.2,0.2,1};
 			headsetObject.drawMe();
 
-			const pose_type groundtruth_pose = pp->get_fast_true_pose();
-			if(true /*groundtruth_pose is valid */) {
+			if(pp->true_pose_reliable()) {
+				const pose_type groundtruth_pose = pp->get_true_pose();
 				headsetPose = generateHeadsetTransform(groundtruth_pose.position, groundtruth_pose.orientation, tracking_position_offset);
 			}
 			modelView = userView * headsetPose;
@@ -391,17 +402,13 @@ public:
 			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
 			glfwSwapBuffers(gui_window);
-			
 		}
-		
 	}
 private:
-	std::thread _m_thread;
-	std::atomic<bool> _m_terminate {false};
 
 	//GLFWwindow * const glfw_context;
 	const std::shared_ptr<switchboard> sb;
-	const std::shared_ptr<const pose_prediction> pp;
+	const std::shared_ptr<pose_prediction> pp;
 
 	switchboard::reader<pose_type> _m_slow_pose;
 	// switchboard::reader<imu_cam_type> _m_imu_cam_data;
@@ -420,6 +427,8 @@ private:
 	float view_dist = 6.0;
 
 	bool follow_headset = false;
+
+	double lastTime;
 
 	// Currently, the GL demo app applies this offset to the camera view.
 	// This is just to make it look nicer with the included SLAM dataset.
@@ -440,18 +449,6 @@ private:
 	GLuint modelViewAttr;
 	GLuint projectionAttr;
 
-	GLuint ground_vbo;
-	GLuint ground_normal_vbo;
-	GLuint water_vbo;
-	GLuint water_normal_vbo;
-	GLuint trees_vbo;
-	GLuint trees_normal_vbo;
-	GLuint rocks_vbo;
-	GLuint rocks_normal_vbo;
-
-	GLuint headset_vbo;
-	GLuint headset_normal_vbo;
-
 	GLuint colorUniform;
 
 	// Scenery
@@ -465,20 +462,6 @@ private:
 
 	ksAlgebra::ksMatrix4x4f basicProjection;
 
-	static void GLAPIENTRY
-	MessageCallback( GLenum source,
-					GLenum type,
-					GLuint id,
-					GLenum severity,
-					GLsizei length,
-					const GLchar* message,
-					const void* userParam )
-	{
-	fprintf( stderr, "GL CALLBACK: %s type = 0x%x, severity = 0x%x, message = %s\n",
-			( type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : "" ),
-				type, severity, message );
-	}
-
 public:
 	/* compatibility interface */
 
@@ -488,7 +471,7 @@ public:
 		// It serves more as an event stream. Camera frames are only available on this topic
 		// the very split second they are made available. Subsequently published packets to this
 		// topic do not contain the camera frames.
-   		sb->schedule<imu_cam_type>("imu_cam", std::bind(&debugview::imu_cam_handler, this, std::placeholders::_1));
+		sb->schedule<imu_cam_type>(get_name(), "imu_cam", std::bind(&debugview::imu_cam_handler, this, std::placeholders::_1));
 
 		glfwWindowHint(GLFW_VISIBLE, GL_TRUE);
 		const char* glsl_version = "#version 430 core";
@@ -585,8 +568,8 @@ public:
 		);
 
 		// Generate fun test pattern for missing camera images.
-		for(int x = 0; x < TEST_PATTERN_WIDTH; x++){
-			for(int y = 0; y < TEST_PATTERN_HEIGHT; y++){
+		for(unsigned x = 0; x < TEST_PATTERN_WIDTH; x++){
+			for(unsigned y = 0; y < TEST_PATTERN_HEIGHT; y++){
 				test_pattern[x][y] = ((x+y) % 6 == 0) ? 255 : 0;
 			}
 		}
@@ -604,17 +587,12 @@ public:
 
 		glfwMakeContextCurrent(NULL);
 
-		_m_thread = std::thread{&debugview::main_loop, this};
+		lastTime = glfwGetTime();
 
-	}
-
-	void stop() {
-		_m_terminate.store(true);
-		_m_thread.join();
+		threadloop::start();
 	}
 
 	virtual ~debugview() override {
-		stop();
 		ImGui_ImplOpenGL3_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
 		ImGui::DestroyContext();

@@ -8,17 +8,16 @@ using namespace ILLIXR;
 
 const std::string data_path = "data1/";
 
-class offline_imu_cam : public ILLIXR::threadloop {
+class offline_imu_cam : public threadloop {
 public:
-	offline_imu_cam(const phonebook* pb)
-		: _m_sensor_data{load_data(data_path)}
+	offline_imu_cam(std::string name_, phonebook* pb_)
+		: threadloop{name_, pb_}
+		, _m_sensor_data{load_data(data_path)}
+		, _m_sensor_data_it{_m_sensor_data.cbegin()}
 		, _m_sb{pb->lookup_impl<switchboard>()}
 		, _m_imu_cam{_m_sb->get_writer<imu_cam_type>("imu_cam")}
-		, _m_sensor_data_it{_m_sensor_data.cbegin()}
-	{
-		dataset_first_time = _m_sensor_data_it->first;		
-		real_first_time = std::chrono::system_clock::now();
-	}
+		, dataset_first_time{_m_sensor_data_it->first}
+	{ }
 
 protected:
 	virtual void _p_one_iteration() override {
@@ -37,19 +36,26 @@ protected:
 					(sensor_datum.imu0.value().angular_v).cast<float>(),
 					(sensor_datum.imu0.value().linear_a).cast<float>(),
 					sensor_datum.cam0
-						? std::move(sensor_datum.cam0.value().load())
+						? sensor_datum.cam0.value().load()
 						: nullptr,
 					sensor_datum.cam1
-						? std::move(sensor_datum.cam1.value().load())
+						? sensor_datum.cam1.value().load()
 						: nullptr,
 					dataset_now,
 				};
 				_m_imu_cam.put(event);
 			}
 
-			// last_time = dataset_now;
 			++_m_sensor_data_it;
 		}
+	}
+
+public:
+	virtual void start() override {
+		// this is not done in the constructor, because I want it to
+		// be done at thread-launch time, not load-time.
+		real_first_time = std::chrono::system_clock::now();
+		threadloop::start();
 	}
 
 private:

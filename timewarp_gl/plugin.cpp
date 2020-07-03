@@ -4,7 +4,7 @@
 #include <thread>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
-#include "common/plugin.hpp"
+#include "common/threadloop.hpp"
 #include "common/switchboard.hpp"
 #include "common/data_format.hpp"
 #include "common/extended_window.hpp"
@@ -24,17 +24,18 @@ typedef void (*glXSwapIntervalEXTProc)(Display *dpy, GLXDrawable drawable, int i
 // If this is defined, gldemo will use Monado-style eyebuffers
 //#define USE_ALT_EYE_FORMAT
 
-class timewarp_gl : public plugin {
+class timewarp_gl : public threadloop {
 
 public:
 	// Public constructor, create_component passes Switchboard handles ("plugs")
 	// to this constructor. In turn, the constructor fills in the private
 	// references to the switchboard plugs, so the component can read the
 	// data whenever it needs to.
-	timewarp_gl(const phonebook* pb)
-		: sb{pb->lookup_impl<switchboard>()}
-		, xwin{pb->lookup_impl<xlib_gl_extended_window>()}
+	timewarp_gl(std::string name_, phonebook* pb_)
+		: threadloop{name_, pb_}
+		, sb{pb->lookup_impl<switchboard>()}
 		, pp{pb->lookup_impl<pose_prediction>()}
+		, xwin{pb->lookup_impl<xlib_gl_extended_window>()}
 	#ifdef USE_ALT_EYE_FORMAT
 		, _m_eyebuffer{sb->get_reader<rendered_frame_alt>("eyebuffer")}
 	#else
@@ -70,9 +71,6 @@ private:
 	switchboard::writer<hologram_input> _m_hologram;
 
 	GLuint timewarpShaderProgram;
-	GLuint basicShaderProgram;
-	std::thread _m_thread;
-	std::atomic<bool> _m_terminate {false};
 
 	double lastSwapTime;
 	double lastFrameTime;
@@ -80,25 +78,6 @@ private:
 
 	HMD::hmd_info_t hmd_info;
 	HMD::body_info_t body_info;
-
-	GLuint basic_pos_attr;
-	GLuint basic_uv_attr;
-
-	GLuint basic_vao;
-	GLuint basic_pos_vbo;
-	GLuint basic_uv_vbo;
-	GLuint basic_indices_vbo;
-
-	GLfloat plane_vertices[8] = {  // Coordinates for the vertices of a plane.
-         -1, 1,   1, 1,
-          -1, -1,   1, -1 };
-
-	GLfloat plane_uvs[8] = {  // UVs for plane
-			0, 1,   1, 1,
-			0, 0,   1, 0 };
-
-	GLuint plane_indices[6] = {  // Plane indices
-			0,2,3, 1,0,3 };
 
 	// Eye sampler array
 	GLuint eye_sampler_0;
@@ -287,16 +266,16 @@ private:
 
 public:
 
-	void main_loop() {
-		lastSwapTime = glfwGetTime();
-		while (!_m_terminate.load()) {
+	void _p_one_iteration() override {
+		{
 			using namespace std::chrono_literals;
 			// Sleep for approximately 90% of the time until the next vsync.
 			// Scheduling granularity can't be assumed to be super accurate here,
 			// so don't push your luck (i.e. don't wait too long....) Tradeoff with
 			// MTP here. More you wait, closer to the display sync you sample the pose.
-			// TODO use more precise sleep.
-			double sleep_start = glfwGetTime();
+
+			// TODO: use more precise sleep.
+
 			// TODO: poll GLX window events
 			std::this_thread::sleep_for(std::chrono::duration<double>(EstimateTimeToSleep(DELAY_FRACTION)));
 			warp(glfwGetTime());
@@ -405,7 +384,9 @@ public:
 
 		glXMakeCurrent(xwin->dpy, None, NULL);
 
-		_m_thread = std::thread{&timewarp_gl::main_loop, this};
+		lastSwapTime = glfwGetTime();
+
+		threadloop::start();
 	}
 
 
@@ -420,7 +401,7 @@ public:
 		ksAlgebra::ksMatrix4x4f_CreateFromQuaternion( viewMatrix, &latest_quat);
 	}
 
-	virtual void warp(float time) {
+	virtual void warp([[maybe_unused]] float time) {
 		glXMakeCurrent(xwin->dpy, xwin->win, xwin->glc);
 
 		auto most_recent_frame = _m_eyebuffer.get_latest_ro();
@@ -461,12 +442,8 @@ public:
 		// TODO: Right now, this samples the latest pose published to the "pose" topic.
 		// However, this should really be polling the high-frequency pose prediction topic,
 		// given a specified timestamp!
-
 		const pose_type latest_pose = pp->get_fast_pose();
 		GetViewMatrixFromPose(&viewMatrixBegin, latest_pose);
-		if (true /*latest_pose is valid*/) {
-			GetViewMatrixFromPose(&viewMatrixBegin, latest_pose);
-		}
 
 		// std::cout << "Timewarp: old " << most_recent_frame->render_pose.pose << ", new " << latest_pose->pose << std::endl;
 
@@ -589,11 +566,6 @@ public:
 		}
 		lastFrameTime = glfwGetTime();
 
-	}
-
-	virtual void stop() {
-		_m_terminate.store(true);
-		_m_thread.join();
 	}
 
 	virtual ~timewarp_gl() override {

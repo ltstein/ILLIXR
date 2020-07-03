@@ -13,6 +13,7 @@
 #include <stdexcept>
 
 #include "phonebook.hpp"
+#include "cpu_timer.hpp"
 
 #include "concurrentqueue.hpp"
 template <typename T> using queue = moodycamel::ConcurrentQueue<T>;
@@ -72,6 +73,8 @@ namespace ILLIXR {
 	 *
 	 * - There are two ways of reading: asynchronous reading and synchronous
 	 * reading:
+	 * [1]: https://en.wikipedia.org/wiki/Slab_allocation
+	 * [2]: https://en.wikipedia.org/wiki/Multiple_buffering
 	 *
 	 *   - Asynchronous reading returns the most-recent event on the topic
 	 * (idempotently). One can do this through (in any thread) the
@@ -81,13 +84,9 @@ namespace ILLIXR {
 	 * which gets published. One can schedule computation by `schedule()`, which
 	 * will run the computation in a thread managed by switchboard.
 	 *
-	 * \code{.cpp}
-	 * void do_stuff(switchboard* sb) {
-	 *     auto topic1 = sb->subscribe_latest<topic1_type>("topic1");
-	 *     auto topic2 = sb->publish<topic2_type>("topic2");
 	 *
 	 *     // Read topic 3 synchronously
-	 *     sb->schedule<topic3_type>("topic3", [&](switchboard::ptr<topic3_type>
+	 *     sb->schedule<topic3_type>("task_1", "topic3", [&](switchboard::ptr<topic3_type>
 	 * event3) {
 	 *         // This is a lambda expression
 	 *         // https://en.cppreference.com/w/cpp/language/lambda
@@ -202,9 +201,10 @@ namespace ILLIXR {
 		 * @throws if topic already exists, and its type does not match the `event`.
 		 */
 		template <typename specific_event>
-		void schedule(std::function<void(ptr<const specific_event>)> callback) {
+		void schedule(const std::string& account_name, std::function<void(ptr<const specific_event>)> callback) {
 			const std::lock_guard<std::mutex> lock{_m_callbacks_lock};
-			_m_callbacks.push_back([callback](ptr<const event> this_event) {
+			_m_callbacks.push_back([callback, &account_name](ptr<const event> this_event) {
+				PRINT_CPU_TIME_FOR_THIS_BLOCK(account_name);
 				assert(this_event);
 				ptr<const specific_event> this_specific_event = std::dynamic_pointer_cast<const specific_event>(this_event);
 				// assert dynamic cast succeeded
@@ -367,10 +367,10 @@ namespace ILLIXR {
 			return reader<specific_event>(this_topic);
 		}
 
-		template <typename specific_event> void schedule(const std::string& name, std::function<void(ptr<const specific_event>)> callback) {
+		template <typename specific_event> void schedule(const std::string& account_name, const std::string& name, std::function<void(ptr<const specific_event>)> callback) {
 			topic& this_topic = ensure_topic<specific_event>(name);
 			// std::cerr << "registering callback " << callback << " on " << name << std::endl;
-			this_topic.schedule(callback);
+			this_topic.schedule(account_name, callback);
 		}
 
 	private:

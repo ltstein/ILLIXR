@@ -5,7 +5,7 @@
 #include <cmath>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
-#include "common/plugin.hpp"
+#include "common/threadloop.hpp"
 #include "common/switchboard.hpp"
 #include "common/data_format.hpp"
 #include "common/extended_window.hpp"
@@ -34,15 +34,17 @@ static constexpr int   EYE_TEXTURE_HEIGHT  = 1024;
 // If this is defined, gldemo will use Monado-style eyebuffers
 //#define USE_ALT_EYE_FORMAT
 
-class gldemo : public plugin {
+class gldemo : public threadloop {
 public:
 	// Public constructor, create_component passes Switchboard handles ("plugs")
 	// to this constructor. In turn, the constructor fills in the private
 	// references to the switchboard plugs, so the component can read the
 	// data whenever it needs to.
 
-	gldemo(const phonebook* pb)
-		: sb{pb->lookup_impl<switchboard>()}
+	gldemo(std::string name_, phonebook* pb_)
+		: threadloop{name_, pb_}
+		, xwin{new xlib_gl_extended_window{1, 1, pb->lookup_impl<xlib_gl_extended_window>()->glc}}
+		, sb{pb->lookup_impl<switchboard>()}
 		//, xwin{pb->lookup_impl<xlib_gl_extended_window>()}
 		, pp{pb->lookup_impl<pose_prediction>()}
 #ifdef USE_ALT_EYE_FORMAT
@@ -50,8 +52,6 @@ public:
 #else
 		, _m_eyebuffer{sb->get_writer<rendered_frame>("eyebuffer")}
 #endif
-		, parent{pb->lookup_impl<xlib_gl_extended_window>()}
-		, xwin{new xlib_gl_extended_window {1, 1, parent->glc}} // Well, the gldemo somehow needs a separate window/ctx
 	{ }
 
 
@@ -112,10 +112,16 @@ public:
 		glFrontFace(GL_CCW);
 	}
 
-	void main_loop() {
-		double lastTime = glfwGetTime();
-		glXMakeCurrent(xwin->dpy, xwin->win, xwin->glc);		
-		while (!_m_terminate.load()) {
+	bool first_iteration = true;
+	void _p_one_iteration() override {
+		if (first_iteration) {
+			// Note: glfwMakeContextCurrent must be called from the thread which will be using it.
+			// Therefore, I use this first_iteration variable, which I unset immediately after.
+			glXMakeCurrent(xwin->dpy, xwin->win, xwin->glc);
+			first_iteration = false;
+		}
+
+		{
 			using namespace std::chrono_literals;
 			// This "app" is "very slow"!
 			//std::this_thread::sleep_for(cosf(glfwGetTime()) * 50ms + 100ms);
@@ -127,8 +133,6 @@ public:
 			// Determine which set of eye textures to be using.
 			unsigned int buffer_to_use = which_buffer.load();
 
-			const pose_type pose = pp->get_fast_pose();
-
 			// We'll calculate this model view matrix
 			// using fresh pose data, if we have any.
 			ksAlgebra::ksMatrix4x4f modelViewMatrix;
@@ -137,12 +141,10 @@ public:
 			ksAlgebra::ksMatrix4x4f modelMatrix;
 			ksAlgebra::ksMatrix4x4f_CreateTranslation(&modelMatrix, 0, 0, 0);
 
-			ksAlgebra::ksMatrix4x4f offsetRotation;
-
-
-			if (true /* pose is valid */) {
+			if (pp->fast_pose_reliable()) {
 				// We have a valid pose from our Switchboard plug.
 
+				const pose_type pose = pp->get_fast_pose();
 				if(counter == 50){
 					std::cerr << "First pose received: quat(wxyz) is " << pose.orientation.w() << ", " << pose.orientation.x() << ", " << pose.orientation.y() << ", " << pose.orientation.z() << std::endl;
 					offsetQuat = Eigen::Quaternionf(pose.orientation);
@@ -253,28 +255,27 @@ public:
 			glFlush();
 
 			// Publish our submitted frame handle to Switchboard!
-			rendered_frame_alt* frame = new (_m_eyebuffer.allocate()) rendered_frame_alt {
 #ifdef USE_ALT_EYE_FORMAT
-				eyeTextures, {buffer_to_use, buffer_to_use}, pose
+			auto frame = new rendered_frame_alt;
+			frame->texture_handles[0] = eyeTextures[0];
+			frame->texture_handles[1] = eyeTextures[1];
+			frame->swap_indices[0] = buffer_to_use;
+			frame->swap_indices[1] = buffer_to_use;
 #else
-				eyeTextures[buffer_to_use], pose
+			auto frame = new rendered_frame;
+			frame->texture_handle = eyeTextures[buffer_to_use];
 #endif
-			};
+			frame->render_pose = pp->get_fast_pose();
 			which_buffer.store(buffer_to_use == 1 ? 0 : 1);
 
 			_m_eyebuffer.put(frame);
-			
 		}
-		
 	}
 
 private:
-	const std::shared_ptr<xlib_gl_extended_window> parent;
-	const std::unique_ptr<xlib_gl_extended_window> xwin;
+	const std::unique_ptr<const xlib_gl_extended_window> xwin;
 	const std::shared_ptr<switchboard> sb;
 	const std::shared_ptr<const pose_prediction> pp;
-	std::thread _m_thread;
-	std::atomic<bool> _m_terminate {false};
 	
 	// Switchboard plug for application eye buffer.
 	// We're not "writing" the actual buffer data,
@@ -285,8 +286,6 @@ private:
 	#else
 	switchboard::writer<rendered_frame> _m_eyebuffer;
 	#endif
-
-	GLFWwindow* hidden_window;
 
 	uint counter = 0;
 	Eigen::Quaternionf offsetQuat;
@@ -319,20 +318,7 @@ private:
 
 	ksAlgebra::ksMatrix4x4f basicProjection;
 
-
-	static void GLAPIENTRY
-	MessageCallback( GLenum source,
-					GLenum type,
-					GLuint id,
-					GLenum severity,
-					GLsizei length,
-					const GLchar* message,
-					const void* userParam )
-	{
-	fprintf( stderr, "GL CALLBACK: %s type = 0x%x, severity = 0x%x, message = %s\n",
-			( type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : "" ),
-				type, severity, message );
-	}
+	double lastTime;
 
 	int createSharedEyebuffer(GLuint* texture_handle){
 
@@ -501,17 +487,9 @@ public:
 
 		glXMakeCurrent(xwin->dpy, None, NULL);
 
-		_m_thread = std::thread{&gldemo::main_loop, this};
+		lastTime = glfwGetTime();
 
-	}
-
-	void stop() {
-		_m_terminate.store(true);
-		_m_thread.join();
-	}
-
-	virtual ~gldemo() override {
-		stop();
+		threadloop::start();
 	}
 };
 
