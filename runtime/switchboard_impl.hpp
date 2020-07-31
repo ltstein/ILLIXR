@@ -93,11 +93,9 @@ namespace ILLIXR {
 				/* TODO: (feature:allocate) Free old.*/
 				/* TODO: (optimization:free-list) return to free-list. */
 
-				assert((
-					_m_topic->_m_queue.enqueue(
-						std::make_pair(_m_topic->_m_name, contents)
-					)
-				));
+				[[maybe_unused]] int ret = _m_topic->_m_queue.enqueue(std::make_pair(_m_topic->_m_name, contents));
+				// Unused if the assert is not on.
+				assert(ret);
 			}
 
 			topic_writer(topic* topic) : _m_topic{topic} {
@@ -221,6 +219,7 @@ namespace ILLIXR {
 		}
 
 		virtual ~switchboard_impl() {
+			stop();
 		}
 
 	private:
@@ -235,11 +234,14 @@ namespace ILLIXR {
 			  - Calls invoke_callback, which acquires _m_callbacks_lock, (see its proof of thread-safety).
 			  Therefore this method is thread-safe.
 			 */
+			// TODO(metrics): sw thread start
 			while (!_m_terminate.load()) {
 				std::pair<std::string, const void*> t;
 				if (_m_queue.try_dequeue(t)) {
 					const std::lock_guard lock{_m_registry_lock};
+					// TODO(metrics): sw thread stop
 					_m_registry.at(t.first).invoke_callbacks(t.second);
+					// TODO(metrics): sw thread start
 				}
 			}
 		}
