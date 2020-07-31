@@ -9,15 +9,13 @@
 
 using namespace ILLIXR;
 
-const std::string data_path = "data1/";
-
 class ground_truth_slam : public plugin {
 public:
 	ground_truth_slam(std::string name_, phonebook* pb_)
 		: plugin{name_, pb_}
 		, sb{pb->lookup_impl<switchboard>()}
 		, _m_true_pose{sb->get_writer<pose_type>("true_pose")}
-		, _m_sensor_data{load_data(data_path)}
+		, _m_sensor_data{load_data(std::string{std::getenv("ILLIXR_DATA")})}
 	{ }
 
 	virtual void start() override {
@@ -39,8 +37,6 @@ public:
 
 		_m_true_pose.put(true_pose);
 	}
-
-	virtual ~ground_truth_slam() override {}
 
 private:
 	const std::shared_ptr<switchboard> sb;

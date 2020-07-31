@@ -84,6 +84,17 @@ namespace ILLIXR {
 	 * which gets published. One can schedule computation by `schedule()`, which
 	 * will run the computation in a thread managed by switchboard.
 	 *
+	 * @throws if topic already exists, and its type does not match the `event`.
+	 */
+	template <typename event>
+	void schedule([[maybe_unused]] std::string account_name, std::string name, std::function<void(const event*)> fn) {
+		_p_schedule(name, [=](const void* ptr) {
+			fn(reinterpret_cast<const event*>(ptr));
+		}, typeid(event).hash_code());
+	}
+
+	/**
+	 * @brief Gets a handle to publish to the topic `name`.
 	 *
 	 *     // Read topic 3 synchronously
 	 *     sb->schedule<topic3_type>("task_1", "topic3", [&](switchboard::ptr<topic3_type>

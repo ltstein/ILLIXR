@@ -1,5 +1,4 @@
-#ifndef THREADLOOP_HH
-#define THREADLOOP_HH
+#pragma once
 
 #include <atomic>
 #include <iostream>
@@ -24,20 +23,14 @@ public:
 	/**
 	 * @brief Starts the thread.
 	 */
-	void start() override {
-		_m_thread = std::thread([this]() {
-			while (!should_terminate()) {
-				{   PRINT_CPU_TIME_FOR_THIS_BLOCK(get_name());
-					_p_one_iteration();
-				}
-			}
-		});
+	virtual void start() override {
+		_m_thread = std::thread(std::bind(&threadloop::thread_main, this));
 	}
 
 	/**
 	 * @brief Stops the thread.
 	 */
-	void stop() {
+	virtual void stop() override {
 		_m_terminate.store(true);
 		_m_thread.join();
 	}
@@ -48,7 +41,73 @@ public:
 		}
 	}
 
+private:
+	void thread_main() {
+		metric_coalescer<start_iteration_record> start_it {metric_logger};
+		metric_coalescer<stop_iteration_record> stop_it {metric_logger};
+		metric_coalescer<start_skip_iteration_record> start_skip {metric_logger};
+		metric_coalescer<stop_skip_iteration_record> stop_skip {metric_logger};
+
+		std::size_t it = 0;
+		std::size_t skip_it = 0;
+
+		_p_thread_setup();
+
+		while (!should_terminate()) {
+
+			start_skip.log(std::make_unique<const start_skip_iteration_record>(id, it, skip_it));
+			skip_option s = _p_should_skip();
+			stop_skip.log(std::make_unique<const stop_skip_iteration_record>(id, it, skip_it));
+
+			switch (s) {
+			case skip_option::skip_and_yield:
+				std::this_thread::yield();
+				++skip_it;
+				break;
+			case skip_option::skip_and_spin:
+				++skip_it;
+				break;
+			case skip_option::run:
+				start_it.log(std::make_unique<const start_iteration_record>(id, it, skip_it));
+				_p_one_iteration();
+				stop_it.log(std::make_unique<const stop_iteration_record>(id, it, skip_it));
+				++it;
+				skip_it = 0;
+				break;
+			case skip_option::stop:
+				stop();
+				break;
+			}
+		}
+	}
+
 protected:
+
+	enum class skip_option {
+		/// Run iteration NOW. Only then does CPU timer begin counting.
+		run,
+
+		/// AKA "busy wait". Skip but try again very quickly.
+		skip_and_spin,
+
+		/// Yielding gives up a scheduling quantum, which is determined by the OS, but usually on
+		/// the order of 1-10ms. This is nicer to the other threads in the system.
+		skip_and_yield,
+
+		/// Calls stop.
+		stop,
+	};
+
+	/**
+	 * @brief Gets called in a tight loop, to gate the invocation of `_p_one_iteration()`
+	 */
+	virtual skip_option _p_should_skip() { return skip_option::run; }
+
+	/**
+	 * @brief Gets called at setup time, from the new thread.
+	 */	
+	virtual void _p_thread_setup() { }
+
 	/**
 	 * @brief Override with the computation the thread does every loop.
 	 *
@@ -71,7 +130,7 @@ protected:
 	 * We attempt to still be somewhat responsive to `stop()` and to be more accurate than
 	 * stdlib's `sleep`, by sleeping for the deadline in chunks.
 	 */
-	void reliable_sleep(std::chrono::time_point<std::chrono::system_clock> stop) {
+	void reliable_sleep(std::chrono::high_resolution_clock::time_point stop) {
 		auto start = std::chrono::high_resolution_clock::now();
 		auto sleep_duration = stop - start;
 
@@ -100,5 +159,3 @@ private:
 };
 
 }
-
-#endif
