@@ -202,8 +202,14 @@ public:
 		ImGui::Text("	Camera0: (%d, %d) \n		GL texture handle: %d", camera_texture_sizes[0].x(), camera_texture_sizes[0].y(), camera_textures[0]);
 		ImGui::Text("	Camera1: (%d, %d) \n		GL texture handle: %d", camera_texture_sizes[1].x(), camera_texture_sizes[1].y(), camera_textures[1]);
 		if(ImGui::Button("Calculate new orientation offset")){
+<<<<<<< HEAD
 			const pose_type pose = pp->get_fast_pose();
 			offsetQuat = Eigen::Quaternionf(pose.orientation);
+=======
+			const pose_type* pose_ptr = pp->get_true_pose();
+			if(pose_ptr != NULL)
+				offsetQuat = Eigen::Quaternionf(pose_ptr->orientation);
+>>>>>>> 06420b1dd1ad3ab0a7f507bf40852ffeffcf91b4
 		}
 		ImGui::End();
 
@@ -382,9 +388,15 @@ public:
 			headsetObject.color = {0.2,0.2,0.2,1};
 			headsetObject.drawMe();
 
+<<<<<<< HEAD
 			if(pp->true_pose_reliable()) {
 				const pose_type groundtruth_pose = pp->get_true_pose();
 				headsetPose = generateHeadsetTransform(groundtruth_pose.position, groundtruth_pose.orientation, tracking_position_offset);
+=======
+			const pose_type* groundtruth_pose_ptr = pp->get_true_pose();
+			if(groundtruth_pose_ptr){
+				headsetPose = generateHeadsetTransform(groundtruth_pose_ptr->position, groundtruth_pose_ptr->orientation, tracking_position_offset);
+>>>>>>> 06420b1dd1ad3ab0a7f507bf40852ffeffcf91b4
 			}
 			modelView = userView * headsetPose;
 			glUniformMatrix4fv(modelViewAttr, 1, GL_FALSE, (GLfloat*)modelView.data());
