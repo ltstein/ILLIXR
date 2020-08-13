@@ -439,7 +439,7 @@ public:
 		// TODO: Right now, this samples the latest pose published to the "pose" topic.
 		// However, this should really be polling the high-frequency pose prediction topic,
 		// given a specified timestamp!
-		const pose_type latest_pose = pp->get_fast_pose();
+		const pose_type latest_pose = pp->get_fast_pose(1.0/DISPLAY_REFRESH_RATE);
 		GetViewMatrixFromPose(&viewMatrixBegin, latest_pose);
 
 		// std::cout << "Timewarp: old " << most_recent_frame->render_pose.pose << ", new " << latest_pose->pose << std::endl;

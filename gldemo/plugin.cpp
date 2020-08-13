@@ -141,7 +141,7 @@ public:
 			if (pp->fast_pose_reliable()) {
 				// We have a valid pose from our Switchboard plug.
 
-				const pose_type pose = pp->get_fast_pose();
+				const pose_type pose = pp->get_fast_pose(1.0/60.0);
 				if(counter == 50){
 					std::cerr << "First pose received: quat(wxyz) is " << pose.orientation.w() << ", " << pose.orientation.x() << ", " << pose.orientation.y() << ", " << pose.orientation.z() << std::endl;
 					offsetQuat = Eigen::Quaternionf(pose.orientation);
@@ -258,12 +258,12 @@ public:
 			frame->texture_handles[1] = eyeTextures[1];
 			frame->swap_indices[0] = buffer_to_use;
 			frame->swap_indices[1] = buffer_to_use;
-			frame->render_pose = pp->get_fast_pose();
+			frame->render_pose = pp->get_fast_pose(1.0/60.0);
 			which_buffer.store(buffer_to_use == 1 ? 0 : 1);
 			#else
 			auto frame = new rendered_frame;
 			frame->texture_handle = eyeTextures[buffer_to_use];
-			frame->render_pose = pp->get_fast_pose();
+			frame->render_pose = pp->get_fast_pose(1.0/60.0);
 			assert(pose);
 			which_buffer.store(buffer_to_use == 1 ? 0 : 1);
 			#endif
