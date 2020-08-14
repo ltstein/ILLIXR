@@ -16,8 +16,15 @@
 #include "common/linalg.hpp"
 #include "common/pose_prediction.hpp"
 
+#include <stdio.h>
+#include <cstdio>
+
 using namespace ILLIXR;
 using namespace linalg::aliases;
+
+// The dimension for the output images
+#define width 800
+#define height 600
 
 typedef void (*glXSwapIntervalEXTProc)(Display *dpy, GLXDrawable drawable, int interval);
 
@@ -549,6 +556,42 @@ public:
 			// reused for both eyes. Therefore glDrawElements can be immediately called,
 			// with the UV and position buffers correctly offset.
 			glDrawElements(GL_TRIANGLES, num_distortion_indices, GL_UNSIGNED_INT, (void*)0);
+
+			short TGAhead[] = {0, 2, 0, 0, 0, 0, width, height, 24};
+			if (eye == 0) {
+				GLuint fb = 1;
+				glGenFramebuffers(1, &fb);
+				glBindFramebuffer(GL_FRAMEBUFFER, fb);
+				char addr[50];
+				sprintf(addr, "../frametest/images/time0_%d.tga", it);
+				FILE* out = fopen(addr, "wt");
+				unsigned char* pixels = (unsigned char*)malloc(width * height * 3);
+				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, most_recent_frame->texture_handles[0], 0);
+				
+				glReadBuffer(GL_COLOR_ATTACHMENT0);
+				glReadPixels(0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, pixels);
+				fwrite(&TGAhead, sizeof(TGAhead), 1, out);
+ 				fwrite(pixels, 3 * width * height, 1, out);
+ 				fclose(out);
+				// delete out;
+			}
+			else if (eye == 1) {
+				GLuint fb = 1;
+				glGenFramebuffers(1, &fb);
+				glBindFramebuffer(GL_FRAMEBUFFER, fb);
+				char addr[50];
+				sprintf(addr, "../frametest/images/time1_%d.tga", it);
+				FILE* out = fopen(addr, "wt");
+				unsigned char* pixels = (unsigned char*)malloc(width * height * 3);
+				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, most_recent_frame->texture_handles[1], 0);
+				
+				glReadBuffer(GL_COLOR_ATTACHMENT0);
+				glReadPixels(0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, pixels);
+				fwrite(&TGAhead, sizeof(TGAhead), 1, out);
+ 				fwrite(pixels, 3 * width * height, 1, out);
+ 				fclose(out);
+				// delete out;
+			}
 		}
 
 		GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
@@ -586,6 +629,56 @@ public:
 		}
 		lastFrameTime = glfwGetTime();
 
+		// // The following code are generating the image of an output after bingding the texture
+		// GLuint fb = 1;
+		
+
+		// glGenFramebuffers(1, &fb);
+		// glBindFramebuffer(GL_FRAMEBUFFER, fb);
+		// #ifdef USE_ALT_EYE_FORMAT
+		// FILE* output0;
+		// FILE* output1;
+		// short  TGAhead[] = {0, 2, 0, 0, 0, 0, width, height, 24};
+		// glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, most_recent_frame->texture_handles[0], 0);
+		// unsigned char* pixels = (unsigned char*)malloc(width * height * 3);
+
+		// glReadBuffer(GL_COLOR_ATTACHMENT0);
+		// glReadPixels(0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, pixels);
+
+		// output0 = fopen("../frametest/images/timewarp0.tga", "wt");
+		// fwrite(&TGAhead, sizeof(TGAhead), 1, output0);
+ 		// fwrite(pixels, 3 * width * height, 1, output0);
+ 		// fclose(output0);
+
+		// glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, most_recent_frame->texture_handles[0], 0);
+
+		// glReadBuffer(GL_COLOR_ATTACHMENT0);
+		// glReadPixels(0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, pixels);
+
+		// output1 = fopen("../frametest/images/timewarp1.tga", "wt");
+		// fwrite(&TGAhead, sizeof(TGAhead), 1, output1);
+ 		// fwrite(pixels, 3 * width * height, 1, output1);
+ 		// fclose(output1);
+
+		// free(pixels);
+		// delete output0;
+		// delete output1;
+		// #else
+		// FILE* output_image;
+		// glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, most_recent_frame->texture_handle, 0);
+		// unsigned char* pixels = (unsigned char*)malloc(width * height * 3);
+
+		// glReadBuffer(GL_COLOR_ATTACHMENT0);
+		// glReadPixels(0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, pixels);
+
+		// output_image = fopen("../frametest/images/timewarp.ppm", "wt");
+		// fwrite(&TGAhead, sizeof(TGAhead), 1, output_image);
+ 		// fwrite(pixels, 3 * width * height, 1, output_image);
+ 		// fclose(output_image);
+
+		// free(pixels);
+		// delete output_image;
+		// #endif		
 	}
 
 	virtual ~timewarp_gl() override {

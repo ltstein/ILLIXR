@@ -48,8 +48,7 @@ private:
 		metric_coalescer<start_skip_iteration_record> start_skip {metric_logger};
 		metric_coalescer<stop_skip_iteration_record> stop_skip {metric_logger};
 
-		std::size_t it = 0;
-		std::size_t skip_it = 0;
+		
 
 		_p_thread_setup();
 
@@ -82,7 +81,8 @@ private:
 	}
 
 protected:
-
+	std::size_t it = 0;
+	std::size_t skip_it = 0;
 	enum class skip_option {
 		/// Run iteration NOW. Only then does CPU timer begin counting.
 		run,
