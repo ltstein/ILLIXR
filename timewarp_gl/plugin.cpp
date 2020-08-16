@@ -18,6 +18,8 @@
 
 #include <stdio.h>
 #include <cstdio>
+// #include "bitmap_image.hpp"
+// #include<opencv2/opencv.hpp>
 
 using namespace ILLIXR;
 using namespace linalg::aliases;
@@ -557,23 +559,40 @@ public:
 			// with the UV and position buffers correctly offset.
 			glDrawElements(GL_TRIANGLES, num_distortion_indices, GL_UNSIGNED_INT, (void*)0);
 
-			short TGAhead[] = {0, 2, 0, 0, 0, 0, width, height, 24};
+			// short TGAhead[] = {0, 2, 0, 0, 0, 0, width, height, 24};
 			if (eye == 0) {
 				GLuint fb = 1;
 				glGenFramebuffers(1, &fb);
 				glBindFramebuffer(GL_FRAMEBUFFER, fb);
 				char addr[50];
-				sprintf(addr, "../metrics/eye/left/timestamp_%f.tga", (time * 1000));
-				FILE* out = fopen(addr, "wt");
+				sprintf(addr, "../metrics/eye/left/timestamp_%d.ppm", int(round(time * 1000)));
+				FILE* out = fopen(addr, "wb");
 				unsigned char* pixels = (unsigned char*)malloc(width * height * 3);
 				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, most_recent_frame->texture_handles[0], 0);
 				
 				glReadBuffer(GL_COLOR_ATTACHMENT0);
-				glReadPixels(0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, pixels);
-				fwrite(&TGAhead, sizeof(TGAhead), 1, out);
- 				fwrite(pixels, 3 * width * height, 1, out);
- 				fclose(out);
-				// delete out;
+				glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels);
+				// fwrite(&TGAhead, sizeof(TGAhead), 1, out);
+ 				// fwrite(pixels, 3 * width * height, 1, out);
+ 				// fclose(out);
+
+				fprintf(out,"P3\n");
+				fprintf(out,"# Created by the ILLIXR team\n");
+				fprintf(out,"%d %d\n",width, height);
+				fprintf(out,"255\n");
+
+				int k = 0;
+				for (int i = 0; i < width; ++i) {
+        			for(int j = 0; j < height; ++j) {
+						// k = (j + i * height) * 3;
+            			fprintf(out, "%u %u %u ", (unsigned int) pixels[k], (unsigned int) pixels[k + 1], (unsigned int) pixels[k + 2]);
+            			k = k + 3;
+        			}
+        			fprintf(out,"\n");
+    			}
+    			free(pixels);
+
+				fclose(out);
 			}
 			// else if (eye == 1) {
 			// 	GLuint fb = 1;
