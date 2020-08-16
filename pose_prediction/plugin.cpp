@@ -34,6 +34,7 @@ public:
 
     // future_time: Timestamp in the future in seconds
     virtual pose_type get_fast_pose(double future_time) const override {
+        // double future_time = 0;
         const bool* slam_ready = _m_slam_ready->get_latest_ro();
         if (!*slam_ready) {
             return pose_type{};
