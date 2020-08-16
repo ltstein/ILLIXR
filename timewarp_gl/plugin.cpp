@@ -292,7 +292,7 @@ public:
 	}
 
 	void _p_one_iteration() override {
-		warp(glfwGetTime());
+		warp(glfwGetTime() - tStart);
 	}
 
 	virtual void _p_thread_setup() override {
@@ -563,7 +563,7 @@ public:
 				glGenFramebuffers(1, &fb);
 				glBindFramebuffer(GL_FRAMEBUFFER, fb);
 				char addr[50];
-				sprintf(addr, "../frametest/images/time0_%d.tga", it);
+				sprintf(addr, "../metrics/eye/left/timestamp_%f.tga", (time * 1000));
 				FILE* out = fopen(addr, "wt");
 				unsigned char* pixels = (unsigned char*)malloc(width * height * 3);
 				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, most_recent_frame->texture_handles[0], 0);
@@ -575,23 +575,23 @@ public:
  				fclose(out);
 				// delete out;
 			}
-			else if (eye == 1) {
-				GLuint fb = 1;
-				glGenFramebuffers(1, &fb);
-				glBindFramebuffer(GL_FRAMEBUFFER, fb);
-				char addr[50];
-				sprintf(addr, "../frametest/images/time1_%d.tga", it);
-				FILE* out = fopen(addr, "wt");
-				unsigned char* pixels = (unsigned char*)malloc(width * height * 3);
-				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, most_recent_frame->texture_handles[1], 0);
+			// else if (eye == 1) {
+			// 	GLuint fb = 1;
+			// 	glGenFramebuffers(1, &fb);
+			// 	glBindFramebuffer(GL_FRAMEBUFFER, fb);
+			// 	char addr[50];
+			// 	sprintf(addr, "../frametest/images/time1_%d.tga", it);
+			// 	FILE* out = fopen(addr, "wt");
+			// 	unsigned char* pixels = (unsigned char*)malloc(width * height * 3);
+			// 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, most_recent_frame->texture_handles[1], 0);
 				
-				glReadBuffer(GL_COLOR_ATTACHMENT0);
-				glReadPixels(0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, pixels);
-				fwrite(&TGAhead, sizeof(TGAhead), 1, out);
- 				fwrite(pixels, 3 * width * height, 1, out);
- 				fclose(out);
-				// delete out;
-			}
+			// 	glReadBuffer(GL_COLOR_ATTACHMENT0);
+			// 	glReadPixels(0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, pixels);
+			// 	fwrite(&TGAhead, sizeof(TGAhead), 1, out);
+ 			// 	fwrite(pixels, 3 * width * height, 1, out);
+ 			// 	fclose(out);
+			// 	// delete out;
+			// }
 		}
 
 		GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);

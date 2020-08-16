@@ -7,6 +7,8 @@
 #include "plugin.hpp"
 #include "cpu_timer.hpp"
 
+#include <GLFW/glfw3.h>
+
 namespace ILLIXR {
 
 /**
@@ -48,8 +50,6 @@ private:
 		metric_coalescer<start_skip_iteration_record> start_skip {metric_logger};
 		metric_coalescer<stop_skip_iteration_record> stop_skip {metric_logger};
 
-		
-
 		_p_thread_setup();
 
 		while (!should_terminate()) {
@@ -68,6 +68,9 @@ private:
 				break;
 			case skip_option::run:
 				start_it.log(std::make_unique<const start_iteration_record>(id, it, skip_it));
+				if (it == 0) {
+					tStart = glfwGetTime();
+				}
 				_p_one_iteration();
 				stop_it.log(std::make_unique<const stop_iteration_record>(id, it, skip_it));
 				++it;
@@ -83,6 +86,7 @@ private:
 protected:
 	std::size_t it = 0;
 	std::size_t skip_it = 0;
+	float tStart = 0;
 	enum class skip_option {
 		/// Run iteration NOW. Only then does CPU timer begin counting.
 		run,
