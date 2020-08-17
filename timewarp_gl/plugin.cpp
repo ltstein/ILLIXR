@@ -565,7 +565,7 @@ public:
 				glGenFramebuffers(1, &fb);
 				glBindFramebuffer(GL_FRAMEBUFFER, fb);
 				char addr[50];
-				sprintf(addr, "../metrics/eye/left/timestamp_%d.ppm", int(round(time * 1000)));
+				sprintf(addr, "../metrics/eye/left/%d_timestamp.ppm", int(round(time * 1000)));
 				FILE* out = fopen(addr, "wb");
 				unsigned char* pixels = (unsigned char*)malloc(width * height * 3);
 				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, most_recent_frame->texture_handles[0], 0);
