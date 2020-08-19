@@ -585,7 +585,7 @@ public:
 				glGenFramebuffers(1, &fb);
 				glBindFramebuffer(GL_FRAMEBUFFER, fb);
 				char addr[50];
-				sprintf(addr, "./metrics/eye/left/%lu_%d_timestamp.ppm", iteration_no, int((GetNextSwapTimeEstimate() - startTime).count()));
+				sprintf(addr, "./metrics/eye/left/%ld_timestamp.ppm", ((GetNextSwapTimeEstimate() - startTime).count() / 1000));
 				FILE* out = fopen(addr, "wb");
 				
 				unsigned char* pixels = (unsigned char*)malloc(width * height * 3);
@@ -663,7 +663,7 @@ public:
 			{std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(total_gpu_time))},
 		}});
 
-		lastSwapTime = std::chrono::high_resolution_clock::now();
+		lastSwapTime = std::chrono::system_clock::now();
 
 		// Now that we have the most recent swap time, we can publish the new estimate.
 		_m_vsync_estimate->put(new time_type(GetNextSwapTimeEstimate()));
