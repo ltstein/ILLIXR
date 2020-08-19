@@ -16,6 +16,14 @@
 #include "common/linalg.hpp"
 #include "common/pose_prediction.hpp"
 
+// For generating the output images
+#include <stdio.h>
+#include <cstdio>
+
+// The dimension for the output images
+#define width 800
+#define height 600
+
 using namespace ILLIXR;
 using namespace linalg::aliases;
 
@@ -52,8 +60,10 @@ public:
 		, _m_eyebuffer{sb->subscribe_latest<rendered_frame>("eyebuffer")}
 	#endif
 		, _m_hologram{sb->publish<hologram_input>("hologram_in")}
-		, _m_vsync_estimate{sb->publish<time_type>("vsync_estimate")}
-	{ }
+		, _m_vsync_estimate{sb->publish<time_type>("vsync_estimate")}		
+	{
+		startTime = std::chrono::system_clock::now();
+	}
 
 private:
 	const std::shared_ptr<switchboard> sb;
@@ -72,6 +82,8 @@ private:
 
 	const std::shared_ptr<xlib_gl_extended_window> xwin;
 	rendered_frame frame;
+
+	time_type startTime;
 
 	// Switchboard plug for application eye buffer.
 	#ifdef USE_ALT_EYE_FORMAT
@@ -300,7 +312,7 @@ public:
 	}
 
 	virtual void _p_one_iteration() override {
-		warp(glfwGetTime());
+		warp(glfwGetTime() - tStart);
 	}
 
 	virtual void _p_thread_setup() override {
@@ -566,6 +578,44 @@ public:
 			// reused for both eyes. Therefore glDrawElements can be immediately called,
 			// with the UV and position buffers correctly offset.
 			glDrawElements(GL_TRIANGLES, num_distortion_indices, GL_UNSIGNED_INT, (void*)0);
+
+			// The following loop is used to generate the images from the textures we obtained before
+			if (eye == 0) {
+				GLuint fb = 1;
+				glGenFramebuffers(1, &fb);
+				glBindFramebuffer(GL_FRAMEBUFFER, fb);
+				char addr[50];
+				sprintf(addr, "./actual/eye/left/%ld_timestamp.ppm", ((GetNextSwapTimeEstimate() - startTime).count() / 1000));
+				FILE* out = fopen(addr, "wb");
+				
+				unsigned char* pixels = (unsigned char*)malloc(width * height * 3);
+				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, most_recent_frame->texture_handles[0], 0);
+				
+				glReadBuffer(GL_COLOR_ATTACHMENT0);
+				
+				glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels);
+				
+				fprintf(out,"P3\n");
+				
+				fprintf(out,"# Created by the ILLIXR team\n");
+				
+				fprintf(out,"%d %d\n",width, height);
+				fprintf(out,"255\n");
+
+				int k = 0;
+				
+				for (int i = 0; i < width; ++i) {
+        			for(int j = 0; j < height; ++j) {
+						// k = (j + i * height) * 3;
+            			fprintf(out, "%u %u %u ", (unsigned int) pixels[k], (unsigned int) pixels[k + 1], (unsigned int) pixels[k + 2]);
+            			k = k + 3;
+        			}
+        			fprintf(out,"\n");
+    			}
+    			free(pixels);
+
+				fclose(out);
+			}
 		}
 
 		glEndQuery(GL_TIME_ELAPSED);
@@ -613,7 +663,7 @@ public:
 			{std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(total_gpu_time))},
 		}});
 
-		lastSwapTime = std::chrono::high_resolution_clock::now();
+		lastSwapTime = std::chrono::system_clock::now();
 
 		// Now that we have the most recent swap time, we can publish the new estimate.
 		_m_vsync_estimate->put(new time_type(GetNextSwapTimeEstimate()));
