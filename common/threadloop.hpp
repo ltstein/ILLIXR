@@ -62,6 +62,7 @@ public:
 protected:
 	std::size_t iteration_no = 0;
 	std::size_t skip_no = 0;
+	float tStart = 0;
 
 private:
 	void thread_main() {
@@ -86,6 +87,9 @@ private:
 				++skip_no;
 				break;
 			case skip_option::run: {
+				if (iteration_no == 0) {
+					tStart = glfwGetTime();
+				}
 				_p_one_iteration();
 				it_log.log(record{&__threadloop_iteration_header, {
 					{id},
