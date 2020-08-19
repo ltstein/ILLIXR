@@ -585,7 +585,7 @@ public:
 				glGenFramebuffers(1, &fb);
 				glBindFramebuffer(GL_FRAMEBUFFER, fb);
 				char addr[50];
-				sprintf(addr, "./actual/eye/left/%ld_timestamp.ppm", ((GetNextSwapTimeEstimate() - startTime).count() / 1000));
+				sprintf(addr, "./actual-new/eye/left/%ld_timestamp.ppm", ((GetNextSwapTimeEstimate() - startTime).count() / 1000));
 				FILE* out = fopen(addr, "wb");
 				
 				unsigned char* pixels = (unsigned char*)malloc(width * height * 3);

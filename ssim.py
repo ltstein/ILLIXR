@@ -14,8 +14,8 @@ from sklearn.metrics import mean_squared_error
 from math import sqrt
 
 # Incicate the path for the two folders
-groundTruthPath = "metrics/eye/left/"
-testPath = "actual/eye/left/"
+groundTruthPath = "ideal/eye/left/"
+testPath = "actual-new/eye/left/"
 
 """
 The way to do the 1-to-1 comparison
