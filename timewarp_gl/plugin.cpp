@@ -15,6 +15,7 @@
 #include "shaders/timewarp_shader.hpp"
 #include "common/linalg.hpp"
 #include "common/pose_prediction.hpp"
+#include "../runtime/concurrentqueue.hpp"
 
 // For generating the output images
 #include <stdio.h>
@@ -51,7 +52,44 @@ private:
 	static constexpr double RUNNING_AVG_ALPHA = 0.1;
 
 	static constexpr std::chrono::nanoseconds vsync_period {std::size_t(NANO_SEC/DISPLAY_REFRESH_RATE)};
-	std::vector<std::pair<std::size_t, std::array<unsigned char, SCREEN_WIDTH * SCREEN_HEIGHT>>> frames;
+
+	class image_type {
+	public:
+		unsigned char* image;
+		std::size_t time_stamp;
+	};
+
+	class copy_thread_ {
+	public:
+		copy_thread()
+			: thread{std::bind(copy_thread::thread_main, this)}
+		{ }
+		~copy_thread() {
+			_terminate.store(true);
+			thread.join();
+		}
+		void feed_image(image_type image) {
+			bool b = queue.enqueue(image);
+			assert(b);
+		}
+	private:
+		void thread_main() {
+			while (!terminate.load()) {
+				image_type image;
+				if (queue.try_dequeue(image)) {
+					write_image(image);
+				} else {
+					std::this_thread::sleep_for(std::chrono::milliseconds{1});
+				}
+			}
+			while (queue.try_dequeue(image)) {
+				write_image(image);
+			}
+		}
+		std::atomic<bool> _terminate {false};
+		std::thread thread;
+	};
+	copy_thread_ copy_thread;
 
 public:
 	// Public constructor, create_component passes Switchboard handles ("plugs")
@@ -621,6 +659,10 @@ public:
     			free(pixels);
 
 				fclose(out);
+
+				copy_thread.feed_image(image_type{
+					pixels, (GetNextSwapTimeEstimate() - startTime).count() / 1000
+				});
 			}
 		}
 
