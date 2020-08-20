@@ -69,10 +69,10 @@ private:
 
 	class copy_thread_ {
 	public:
-		copy_thread()
-			: thread{std::bind(copy_thread::thread_main, this)}
+		copy_thread_()
+			: thread{std::bind(&copy_thread_::thread_main, this)}
 		{ }
-		~copy_thread() {
+		~copy_thread_() {
 			_terminate.store(true);
 			thread.join();
 		}
@@ -81,9 +81,12 @@ private:
 			assert(b);
 		}
 	private:
+		void write_image(image_type image) {
+		}
+
 		void thread_main() {
-			while (!terminate.load()) {
-				image_type image;
+			image_type image;
+			while (!_terminate.load()) {
 				if (queue.try_dequeue(image)) {
 					write_image(image);
 				} else {
@@ -96,6 +99,7 @@ private:
 		}
 		std::atomic<bool> _terminate {false};
 		std::thread thread;
+		moodycamel::ConcurrentQueue<image_type> queue;
 	};
 	copy_thread_ copy_thread;
 
@@ -142,6 +146,9 @@ private:
 
 	// Switchboard plug for publishing 
 	std::unique_ptr<writer<time_type>> _m_vsync_estimate;
+
+	std::unique_ptr<writer<std::chrono::duration<double, std::nano>>> _m_frame_age;
+	std::unique_ptr<writer<std::chrono::duration<double, std::nano>>> _m_mtp;
 
 	GLuint timewarpShaderProgram;
 
@@ -191,8 +198,6 @@ private:
 
 	// Hologram call data
 	long long _hologram_seq{0};
-
-	std::vector<std::array<>> buffers;
 
 	void BuildTimewarp(HMD::hmd_info_t* hmdInfo){
 
@@ -631,11 +636,7 @@ public:
 				glGenFramebuffers(1, &fb);
 				glBindFramebuffer(GL_FRAMEBUFFER, fb);
 				char addr[50];
-<<<<<<< HEAD
 				sprintf(addr, "./metrics/eye/left/%ld_timestamp.ppm", ((GetNextSwapTimeEstimate() - startTime).count() / 1000));
-=======
-				sprintf(addr, "./ideal-new/eye/left/%ld_timestamp.ppm", ((GetNextSwapTimeEstimate() - startTime).count() / 1000));
->>>>>>> origin/vsyncNew
 				FILE* out = fopen(addr, "wb");
 				
 				unsigned char* pixels = (unsigned char*)malloc(width * height * 3);
@@ -665,13 +666,10 @@ public:
     			free(pixels);
 
 				fclose(out);
-<<<<<<< HEAD
-
 				copy_thread.feed_image(image_type{
-					pixels, (GetNextSwapTimeEstimate() - startTime).count() / 1000
+					pixels, static_cast<size_t>((GetNextSwapTimeEstimate() - startTime).count() / 1000)
 				});
-=======
->>>>>>> origin/vsyncNew
+
 			}
 		}
 
@@ -716,7 +714,7 @@ public:
 			{iteration_no},
 			{gpu_start_wall_time},
 			{std::chrono::high_resolution_clock::now()},
-			{std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed_time)},
+			{std::chrono::nanoseconds(elapsed_time)},
 		}});
 
 		lastSwapTime = std::chrono::system_clock::now();
