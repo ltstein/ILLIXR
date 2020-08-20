@@ -10,12 +10,17 @@ import imutils
 import cv2
 
 import os
-from sklearn.metrics import mean_squared_error
-from math import sqrt
+import numpy as np
+# from sklearn.metrics import mean_squared_error
+# from math import sqrt
 
 # Incicate the path for the two folders
-groundTruthPath = "metrics/eye/left/"
-testPath = "metrics/eye/left/"
+groundTruthPath = "ideal/eye/left/"
+testPath = "actual-new/eye/left/"
+
+# The path to store the gradient images and the SSIM images
+gradPath = "gradient/eye/left/"
+ssimPath = "ssim/eye/left/"
 
 """
 The way to do the 1-to-1 comparison
@@ -35,27 +40,27 @@ for i in range(0, len(testList)):
     # Retrieve the time of the test image
     numberB = []
     for word in range(0, len(testList[i])):
-        if testList[0][word].isdigit():
-            numberB.append(int(testList[0][word]))
+        if testList[i][word].isdigit():
+            numberB.append(int(testList[i][word]))
     stringsB = [str(k) for k in numberB]
     bString = "".join(stringsB)
     bInt = int(bString)
 
-    deltaT = 100000000.0
+    deltaT = 100000000000000.0
     gtImage = groundTruthList[0]
     # Find the proper file to compare from the ground-truth images
     for j in range(0, len(groundTruthList)):
         numberA = []
-        for word in range(0, len(groundTruthList[i])):
-            if groundTruthList[i][word].isdigit():
-                numberA.append(int(groundTruthList[i][word]))
+        for word in range(0, len(groundTruthList[j])):
+            if groundTruthList[j][word].isdigit():
+                numberA.append(int(groundTruthList[j][word]))
         stringsA = [str(k) for k in numberA]
         aString = "".join(stringsA)
         aInt = int(aString)
 
         if (abs(bInt - aInt) < deltaT):
             deltaT = abs(bInt - aInt)
-            gtImage = groundTruthList[i]
+            gtImage = groundTruthList[j]
 
     imageA = cv2.imread(groundTruthPath + gtImage)
 
@@ -76,9 +81,10 @@ for i in range(0, len(testList)):
     # Append the results
     SSIM.append(score)
 
-# Calculate the RMSE
-mse = mean_squared_error(SSIM, perfectValue)
-rmse = sqrt(mse)
+# Calculate the average and the standard deviation of SSIM
+ave = np.mean(SSIM)
+sd = np.std(SSIM)
 
 # Print out the result
-print("RMSE: {}".format(rmse))
+print("SSIM_AVE: {}".format(ave))
+print("SSIM_SD: {}".format(sd))

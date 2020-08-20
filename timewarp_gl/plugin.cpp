@@ -21,6 +21,14 @@
 #include <stdio.h>
 #include <cstdio>
 
+// For generating the output images
+#include <stdio.h>
+#include <cstdio>
+
+// The dimension for the output images
+#define width 800
+#define height 600
+
 using namespace ILLIXR;
 using namespace linalg::aliases;
 
@@ -132,14 +140,8 @@ private:
 	// Switchboard plug for sending hologram calls
 	std::unique_ptr<writer<hologram_input>> _m_hologram;
 
-	// Switchboard plug for publishing vsync estimates
+	// Switchboard plug for publishing 
 	std::unique_ptr<writer<time_type>> _m_vsync_estimate;
-
-	// Switchboard plug for publishing MTP metrics
-	std::unique_ptr<writer<std::chrono::duration<double, std::nano>>> _m_mtp;
-
-	// Switchboard plug for publishing frame stale-ness metrics
-	std::unique_ptr<writer<std::chrono::duration<double, std::nano>>> _m_frame_age;
 
 	GLuint timewarpShaderProgram;
 
@@ -511,8 +513,8 @@ public:
 		// TODO: Right now, this samples the latest pose published to the "pose" topic.
 		// However, this should really be polling the high-frequency pose prediction topic,
 		// given a specified timestamp!
-		const fast_pose_type latest_pose = pp->get_fast_pose(GetNextSwapTimeEstimate());
-		GetViewMatrixFromPose(&viewMatrixBegin, latest_pose.pose);
+		const pose_type latest_pose = pp->get_fast_pose().pose;
+		GetViewMatrixFromPose(&viewMatrixBegin, latest_pose);
 
 		// std::cout << "Timewarp: old " << most_recent_frame->render_pose.pose << ", new " << latest_pose->pose << std::endl;
 
@@ -629,7 +631,11 @@ public:
 				glGenFramebuffers(1, &fb);
 				glBindFramebuffer(GL_FRAMEBUFFER, fb);
 				char addr[50];
+<<<<<<< HEAD
 				sprintf(addr, "./metrics/eye/left/%ld_timestamp.ppm", ((GetNextSwapTimeEstimate() - startTime).count() / 1000));
+=======
+				sprintf(addr, "./ideal-new/eye/left/%ld_timestamp.ppm", ((GetNextSwapTimeEstimate() - startTime).count() / 1000));
+>>>>>>> origin/vsyncNew
 				FILE* out = fopen(addr, "wb");
 				
 				unsigned char* pixels = (unsigned char*)malloc(width * height * 3);
@@ -659,10 +665,13 @@ public:
     			free(pixels);
 
 				fclose(out);
+<<<<<<< HEAD
 
 				copy_thread.feed_image(image_type{
 					pixels, (GetNextSwapTimeEstimate() - startTime).count() / 1000
 				});
+=======
+>>>>>>> origin/vsyncNew
 			}
 		}
 
@@ -714,19 +723,11 @@ public:
 
 		// Now that we have the most recent swap time, we can publish the new estimate.
 		_m_vsync_estimate->put(new time_type(GetNextSwapTimeEstimate()));
-
-		// TODO (implement-logging): When we have logging infra, delete this code.
-		// Compute time difference between current post-vsync time and the time of the most recent
-		// imu sample that was used to generate the predicted pose. This is the MTP, assuming good prediction
-		// was used to compute the most recent fast pose.
-		std::chrono::duration<double,std::nano> mtp = (lastSwapTime - latest_pose.imu_time);
-		std::chrono::duration<double,std::nano> predict_to_display = (lastSwapTime - latest_pose.predict_computed_time);
-
 #ifndef NDEBUG
 
-		
-		printf("\033[1;36m[TIMEWARP]\033[0m Motion-to-display latency: %3f ms\n", (float)(mtp.count() / 1000000.0));
-		printf("\033[1;36m[TIMEWARP]\033[0m Prediction-to-display latency: %3f ms\n", (float)(predict_to_display.count() / 1000000.0));
+		// TODO (implement-logging): When we have logging infra, delete this code.
+		// This only looks at warp time, so doesn't take into account IMU frequency.
+		// printf("\033[1;36m[TIMEWARP]\033[0m Motion-to-display latency: %.1f ms, Exponential Average FPS: %.3f\n", (float)(lastSwapTime - warpStart) * 1000.0f, (float)(averageFramerate));
 
 		std::cout<< "Timewarp estimating: " << std::chrono::duration_cast<std::chrono::milliseconds>(GetNextSwapTimeEstimate() - lastSwapTime).count() << "ms in the future" << std::endl;
 #endif

@@ -1,0 +1,6 @@
+This file is the results of the SSIM experiment with GLDemo
+
+SSIM_AVE: 0.8081605912433277
+SSIM_SD: 0.07828884713312717
+
+This file has all the SSIM images
