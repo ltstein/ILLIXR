@@ -4,6 +4,9 @@
 #include <thread>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include <opencv2/core.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
 #include "common/threadloop.hpp"
 #include "common/switchboard.hpp"
 #include "common/data_format.hpp"
@@ -15,6 +18,11 @@
 #include "shaders/timewarp_shader.hpp"
 #include "common/linalg.hpp"
 #include "common/pose_prediction.hpp"
+#include "../runtime/concurrentqueue.hpp"
+
+// For generating the output images
+#include <stdio.h>
+#include <cstdio>
 
 // For generating the output images
 #include <stdio.h>
@@ -43,6 +51,63 @@ const record_header timewarp_gpu_record {
 };
 
 class timewarp_gl : public threadloop {
+private:
+
+	static constexpr int   SCREEN_WIDTH    = 640;
+	static constexpr int   SCREEN_HEIGHT   = 480;
+
+	static constexpr double DISPLAY_REFRESH_RATE = 60.0;
+	static constexpr double FPS_WARNING_TOLERANCE = 0.5;
+	static constexpr double DELAY_FRACTION = 0.8;
+
+	static constexpr double RUNNING_AVG_ALPHA = 0.1;
+
+	static constexpr std::chrono::nanoseconds vsync_period {std::size_t(NANO_SEC/DISPLAY_REFRESH_RATE)};
+
+	class image_type {
+	public:
+		std::unique_ptr<cv::Mat> pixels;
+		std::size_t time_stamp;
+	};
+
+	class copy_thread_ {
+	public:
+		copy_thread_()
+			: thread{std::bind(&copy_thread_::thread_main, this)}
+		{ }
+		~copy_thread_() {
+			_terminate.store(true);
+			thread.join();
+		}
+		void feed_image(image_type&& image) {
+			bool b = queue.enqueue(std::move(image));
+			assert(b);
+		}
+	private:
+		void write_image(image_type&& image) {
+			cv::cvtColor(*(image.pixels), *(image.pixels), CV_BGR2RGB);
+			cv::imwrite(std::string{"./ideal/eye/left/"} + std::to_string(image.time_stamp) + std::string{".bmp"}, *(image.pixels));
+		}
+
+		void thread_main() {
+			while (!_terminate.load()) {
+				image_type image;
+				if (queue.try_dequeue(image)) {
+					write_image(std::move(image));
+				} else {
+					std::this_thread::sleep_for(std::chrono::milliseconds{1});
+				}
+			}
+			image_type image;
+			while (queue.try_dequeue(image)) {
+				write_image(std::move(image));
+			}
+		}
+		std::atomic<bool> _terminate {false};
+		std::thread thread;
+		moodycamel::ConcurrentQueue<image_type> queue;
+	};
+	copy_thread_ copy_thread;
 
 public:
 	// Public constructor, create_component passes Switchboard handles ("plugs")
@@ -60,25 +125,15 @@ public:
 		, _m_eyebuffer{sb->subscribe_latest<rendered_frame>("eyebuffer")}
 	#endif
 		, _m_hologram{sb->publish<hologram_input>("hologram_in")}
-		, _m_vsync_estimate{sb->publish<time_type>("vsync_estimate")}		
-	{
-		startTime = std::chrono::system_clock::now();
-	}
+		, _m_vsync_estimate{sb->publish<time_type>("vsync_estimate")}
+		, _m_mtp{sb->publish<std::chrono::duration<double, std::nano>>("mtp")}
+		, _m_frame_age{sb->publish<std::chrono::duration<double, std::nano>>("warp_frame_age")}
+		, startTime{std::chrono::system_clock::now()}
+	{ }
 
 private:
 	const std::shared_ptr<switchboard> sb;
 	const std::shared_ptr<pose_prediction> pp;
-
-	static constexpr int   SCREEN_WIDTH    = 2560;
-	static constexpr int   SCREEN_HEIGHT   = 1440;
-
-	static constexpr double DISPLAY_REFRESH_RATE = 60.0;
-	static constexpr double FPS_WARNING_TOLERANCE = 0.5;
-	static constexpr double DELAY_FRACTION = 0.8;
-
-	static constexpr double RUNNING_AVG_ALPHA = 0.1;
-
-	static constexpr std::chrono::nanoseconds vsync_period {std::size_t(NANO_SEC/DISPLAY_REFRESH_RATE)};
 
 	const std::shared_ptr<xlib_gl_extended_window> xwin;
 	rendered_frame frame;
@@ -98,10 +153,12 @@ private:
 	// Switchboard plug for publishing 
 	std::unique_ptr<writer<time_type>> _m_vsync_estimate;
 
+	std::unique_ptr<writer<std::chrono::duration<double, std::nano>>> _m_frame_age;
+	std::unique_ptr<writer<std::chrono::duration<double, std::nano>>> _m_mtp;
+
 	GLuint timewarpShaderProgram;
 
 	time_type lastSwapTime;
-	GLuint64 total_gpu_time = 0;
 
 	HMD::hmd_info_t hmd_info;
 	HMD::body_info_t body_info;
@@ -580,47 +637,47 @@ public:
 			glDrawElements(GL_TRIANGLES, num_distortion_indices, GL_UNSIGNED_INT, (void*)0);
 
 			if (pp->fast_pose_reliable()) {
-				glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels);
+				//unsigned char* pixels = (unsigned char*)malloc(SCREEN_WIDTH * SCREEN_HEIGHT * 3);
+				std::unique_ptr<cv::Mat> pixels = std::make_unique<cv::Mat>(SCREEN_HEIGHT, SCREEN_WIDTH, CV_8UC3);
+				glReadPixels(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, GL_RGB, GL_UNSIGNED_BYTE, pixels->ptr());
+				copy_thread.feed_image(image_type{
+					std::move(pixels), static_cast<size_t>((GetNextSwapTimeEstimate() - startTime).count() / 1000)
+				});
 			}
-			
 
 			// The following loop is used to generate the images from the textures we obtained before
-			if (eye == 0) {
-				GLuint fb = 1;
-				glGenFramebuffers(1, &fb);
-				glBindFramebuffer(GL_FRAMEBUFFER, fb);
-				char addr[50];
-				sprintf(addr, "./ideal/eye/left/%ld_timestamp.ppm", ((GetNextSwapTimeEstimate() - startTime).count() / 1000));
-				FILE* out = fopen(addr, "wb");
+			// if (eye == 0) {
+			// 	char addr[50];
+			// 	sprintf(addr, "./actual/eye/left/%ld_timestamp.ppm", ((GetNextSwapTimeEstimate() - startTime).count() / 1000));
+			// 	FILE* out = fopen(addr, "wb");
 				
-				unsigned char* pixels = (unsigned char*)malloc(width * height * 3);
-				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, most_recent_frame->texture_handles[0], 0);
+			// 	unsigned char* pixels = (unsigned char*)malloc(width * height * 3);
 				
-				glReadBuffer(GL_COLOR_ATTACHMENT0);
+			// 	glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels);
 				
-				glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels);
+			// 	fprintf(out,"P3\n");
 				
-				fprintf(out,"P3\n");
+			// 	fprintf(out,"# Created by the ILLIXR team\n");
 				
-				fprintf(out,"# Created by the ILLIXR team\n");
-				
-				fprintf(out,"%d %d\n",width, height);
-				fprintf(out,"255\n");
+			// 	fprintf(out,"%d %d\n",width, height);
+			// 	fprintf(out,"255\n")
 
-				int k = 0;
+			// 	int k = 0;
 				
-				for (int i = 0; i < width; ++i) {
-        			for(int j = 0; j < height; ++j) {
-						// k = (j + i * height) * 3;
-            			fprintf(out, "%u %u %u ", (unsigned int) pixels[k], (unsigned int) pixels[k + 1], (unsigned int) pixels[k + 2]);
-            			k = k + 3;
-        			}
-        			fprintf(out,"\n");
-    			}
-    			free(pixels);
+			// 	for (int i = 0; i < width; ++i) {
+        	// 		for(int j = 0; j < height; ++j) {
+			// 			// k = (j + i * height) * 3;
+            // 			fprintf(out, "%u %u %u ", (unsigned int) pixels[k], (unsigned int) pixels[k + 1], (unsigned int) pixels[k + 2]);
+            // 			k = k + 3;
+        	// 		}
+        	// 		fprintf(out,"\n");
+    		// 	}
+    		// 	free(pixels);
 
-				fclose(out);
-			}
+			// 	fclose(out);
+				
+
+			// }
 		}
 
 		glEndQuery(GL_TIME_ELAPSED);
@@ -660,12 +717,11 @@ public:
 
 		// get the query result
 		glGetQueryObjectui64v(query, GL_QUERY_RESULT, &elapsed_time);
-		total_gpu_time += elapsed_time;
 		metric_logger->log(record{&timewarp_gpu_record, {
 			{iteration_no},
 			{gpu_start_wall_time},
 			{std::chrono::high_resolution_clock::now()},
-			{std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(total_gpu_time))},
+			{std::chrono::nanoseconds(elapsed_time)},
 		}});
 
 		lastSwapTime = std::chrono::system_clock::now();

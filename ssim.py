@@ -15,8 +15,8 @@ import numpy as np
 # from math import sqrt
 
 # Incicate the path for the two folders
-groundTruthPath = "metrics/eye/left/"
-testPath = "metrics/eye/left/"
+groundTruthPath = "ideal/eye/left/"
+testPath = "actual/eye/left/"
 
 """
 The way to do the 1-to-1 comparison
@@ -36,8 +36,8 @@ for i in range(0, len(testList)):
     # Retrieve the time of the test image
     numberB = []
     for word in range(0, len(testList[i])):
-        if testList[0][word].isdigit():
-            numberB.append(int(testList[0][word]))
+        if testList[i][word].isdigit():
+            numberB.append(int(testList[i][word]))
     stringsB = [str(k) for k in numberB]
     bString = "".join(stringsB)
     bInt = int(bString)
@@ -47,16 +47,16 @@ for i in range(0, len(testList)):
     # Find the proper file to compare from the ground-truth images
     for j in range(0, len(groundTruthList)):
         numberA = []
-        for word in range(0, len(groundTruthList[i])):
-            if groundTruthList[i][word].isdigit():
-                numberA.append(int(groundTruthList[i][word]))
+        for word in range(0, len(groundTruthList[j])):
+            if groundTruthList[j][word].isdigit():
+                numberA.append(int(groundTruthList[j][word]))
         stringsA = [str(k) for k in numberA]
         aString = "".join(stringsA)
         aInt = int(aString)
 
         if (abs(bInt - aInt) < deltaT):
             deltaT = abs(bInt - aInt)
-            gtImage = groundTruthList[i]
+            gtImage = groundTruthList[j]
 
     imageA = cv2.imread(groundTruthPath + gtImage)
 
