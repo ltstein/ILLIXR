@@ -20,10 +20,6 @@
 #include <stdio.h>
 #include <cstdio>
 
-// The dimension for the output images
-#define width 800
-#define height 600
-
 using namespace ILLIXR;
 using namespace linalg::aliases;
 
@@ -43,6 +39,19 @@ const record_header timewarp_gpu_record {
 };
 
 class timewarp_gl : public threadloop {
+private:
+
+	static constexpr int   SCREEN_WIDTH    = 2560;
+	static constexpr int   SCREEN_HEIGHT   = 1440;
+
+	static constexpr double DISPLAY_REFRESH_RATE = 60.0;
+	static constexpr double FPS_WARNING_TOLERANCE = 0.5;
+	static constexpr double DELAY_FRACTION = 0.8;
+
+	static constexpr double RUNNING_AVG_ALPHA = 0.1;
+
+	static constexpr std::chrono::nanoseconds vsync_period {std::size_t(NANO_SEC/DISPLAY_REFRESH_RATE)};
+	std::vector<std::pair<std::size_t, std::array<unsigned char, SCREEN_WIDTH * SCREEN_HEIGHT>>> frames;
 
 public:
 	// Public constructor, create_component passes Switchboard handles ("plugs")
@@ -60,25 +69,15 @@ public:
 		, _m_eyebuffer{sb->subscribe_latest<rendered_frame>("eyebuffer")}
 	#endif
 		, _m_hologram{sb->publish<hologram_input>("hologram_in")}
-		, _m_vsync_estimate{sb->publish<time_type>("vsync_estimate")}		
-	{
-		startTime = std::chrono::system_clock::now();
-	}
+		, _m_vsync_estimate{sb->publish<time_type>("vsync_estimate")}
+		, _m_mtp{sb->publish<std::chrono::duration<double, std::nano>>("mtp")}
+		, _m_frame_age{sb->publish<std::chrono::duration<double, std::nano>>("warp_frame_age")}
+		, startTime{std::chrono::system_clock::now()}
+	{ }
 
 private:
 	const std::shared_ptr<switchboard> sb;
 	const std::shared_ptr<pose_prediction> pp;
-
-	static constexpr int   SCREEN_WIDTH    = 2560;
-	static constexpr int   SCREEN_HEIGHT   = 1440;
-
-	static constexpr double DISPLAY_REFRESH_RATE = 60.0;
-	static constexpr double FPS_WARNING_TOLERANCE = 0.5;
-	static constexpr double DELAY_FRACTION = 0.8;
-
-	static constexpr double RUNNING_AVG_ALPHA = 0.1;
-
-	static constexpr std::chrono::nanoseconds vsync_period {std::size_t(NANO_SEC/DISPLAY_REFRESH_RATE)};
 
 	const std::shared_ptr<xlib_gl_extended_window> xwin;
 	rendered_frame frame;
@@ -95,13 +94,18 @@ private:
 	// Switchboard plug for sending hologram calls
 	std::unique_ptr<writer<hologram_input>> _m_hologram;
 
-	// Switchboard plug for publishing 
+	// Switchboard plug for publishing vsync estimates
 	std::unique_ptr<writer<time_type>> _m_vsync_estimate;
+
+	// Switchboard plug for publishing MTP metrics
+	std::unique_ptr<writer<std::chrono::duration<double, std::nano>>> _m_mtp;
+
+	// Switchboard plug for publishing frame stale-ness metrics
+	std::unique_ptr<writer<std::chrono::duration<double, std::nano>>> _m_frame_age;
 
 	GLuint timewarpShaderProgram;
 
 	time_type lastSwapTime;
-	GLuint64 total_gpu_time = 0;
 
 	HMD::hmd_info_t hmd_info;
 	HMD::body_info_t body_info;
@@ -147,6 +151,8 @@ private:
 
 	// Hologram call data
 	long long _hologram_seq{0};
+
+	std::vector<std::array<>> buffers;
 
 	void BuildTimewarp(HMD::hmd_info_t* hmdInfo){
 
@@ -452,7 +458,7 @@ public:
 		// Generate "starting" view matrix, from the pose
 		// sampled at the time of rendering the frame.
 		ksAlgebra::ksMatrix4x4f viewMatrix;
-		GetViewMatrixFromPose(&viewMatrix, most_recent_frame->render_pose);
+		GetViewMatrixFromPose(&viewMatrix, most_recent_frame->render_pose.pose);
 
 		// We simulate two asynchronous view matrices,
 		// one at the beginning of display refresh,
@@ -467,8 +473,8 @@ public:
 		// TODO: Right now, this samples the latest pose published to the "pose" topic.
 		// However, this should really be polling the high-frequency pose prediction topic,
 		// given a specified timestamp!
-		const pose_type latest_pose = pp->get_fast_pose();
-		GetViewMatrixFromPose(&viewMatrixBegin, latest_pose);
+		const fast_pose_type latest_pose = pp->get_fast_pose(GetNextSwapTimeEstimate());
+		GetViewMatrixFromPose(&viewMatrixBegin, latest_pose.pose);
 
 		// std::cout << "Timewarp: old " << most_recent_frame->render_pose.pose << ", new " << latest_pose->pose << std::endl;
 
@@ -655,23 +661,30 @@ public:
 
 		// get the query result
 		glGetQueryObjectui64v(query, GL_QUERY_RESULT, &elapsed_time);
-		total_gpu_time += elapsed_time;
 		metric_logger->log(record{&timewarp_gpu_record, {
 			{iteration_no},
 			{gpu_start_wall_time},
 			{std::chrono::high_resolution_clock::now()},
-			{std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(total_gpu_time))},
+			{std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed_time)},
 		}});
 
 		lastSwapTime = std::chrono::system_clock::now();
 
 		// Now that we have the most recent swap time, we can publish the new estimate.
 		_m_vsync_estimate->put(new time_type(GetNextSwapTimeEstimate()));
-#ifndef NDEBUG
 
 		// TODO (implement-logging): When we have logging infra, delete this code.
-		// This only looks at warp time, so doesn't take into account IMU frequency.
-		// printf("\033[1;36m[TIMEWARP]\033[0m Motion-to-display latency: %.1f ms, Exponential Average FPS: %.3f\n", (float)(lastSwapTime - warpStart) * 1000.0f, (float)(averageFramerate));
+		// Compute time difference between current post-vsync time and the time of the most recent
+		// imu sample that was used to generate the predicted pose. This is the MTP, assuming good prediction
+		// was used to compute the most recent fast pose.
+		std::chrono::duration<double,std::nano> mtp = (lastSwapTime - latest_pose.imu_time);
+		std::chrono::duration<double,std::nano> predict_to_display = (lastSwapTime - latest_pose.predict_computed_time);
+
+#ifndef NDEBUG
+
+		
+		printf("\033[1;36m[TIMEWARP]\033[0m Motion-to-display latency: %3f ms\n", (float)(mtp.count() / 1000000.0));
+		printf("\033[1;36m[TIMEWARP]\033[0m Prediction-to-display latency: %3f ms\n", (float)(predict_to_display.count() / 1000000.0));
 
 		std::cout<< "Timewarp estimating: " << std::chrono::duration_cast<std::chrono::milliseconds>(GetNextSwapTimeEstimate() - lastSwapTime).count() << "ms in the future" << std::endl;
 #endif
