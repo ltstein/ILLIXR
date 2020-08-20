@@ -579,13 +579,18 @@ public:
 			// with the UV and position buffers correctly offset.
 			glDrawElements(GL_TRIANGLES, num_distortion_indices, GL_UNSIGNED_INT, (void*)0);
 
+			if (pp->fast_pose_reliable()) {
+				glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels);
+			}
+			
+
 			// The following loop is used to generate the images from the textures we obtained before
 			if (eye == 0) {
 				GLuint fb = 1;
 				glGenFramebuffers(1, &fb);
 				glBindFramebuffer(GL_FRAMEBUFFER, fb);
 				char addr[50];
-				sprintf(addr, "./metrics/eye/left/%ld_timestamp.ppm", ((GetNextSwapTimeEstimate() - startTime).count() / 1000));
+				sprintf(addr, "./ideal/eye/left/%ld_timestamp.ppm", ((GetNextSwapTimeEstimate() - startTime).count() / 1000));
 				FILE* out = fopen(addr, "wb");
 				
 				unsigned char* pixels = (unsigned char*)malloc(width * height * 3);

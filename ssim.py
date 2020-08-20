@@ -10,8 +10,9 @@ import imutils
 import cv2
 
 import os
-from sklearn.metrics import mean_squared_error
-from math import sqrt
+import numpy as np
+# from sklearn.metrics import mean_squared_error
+# from math import sqrt
 
 # Incicate the path for the two folders
 groundTruthPath = "metrics/eye/left/"
@@ -76,9 +77,11 @@ for i in range(0, len(testList)):
     # Append the results
     SSIM.append(score)
 
-# Calculate the RMSE
-mse = mean_squared_error(SSIM, perfectValue)
-rmse = sqrt(mse)
+# Calculate the average and the standard deviation of SSIM
+ave = np.mean(SSIM)
+sd = np.std(SSIM)
 
 # Print out the result
-print("RMSE: {}".format(rmse))
+print("SSIM_AVE: {}".format(ave))
+print("SSIM_SD: {}".format(sd))
+
