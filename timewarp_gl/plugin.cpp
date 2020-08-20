@@ -312,7 +312,7 @@ public:
 	}
 
 	virtual void _p_one_iteration() override {
-		warp(glfwGetTime() - tStart);
+		warp(glfwGetTime());
 	}
 
 	virtual void _p_thread_setup() override {
@@ -452,7 +452,7 @@ public:
 		// Generate "starting" view matrix, from the pose
 		// sampled at the time of rendering the frame.
 		ksAlgebra::ksMatrix4x4f viewMatrix;
-		GetViewMatrixFromPose(&viewMatrix, most_recent_frame->render_pose);
+		GetViewMatrixFromPose(&viewMatrix, most_recent_frame->render_pose.pose);
 
 		// We simulate two asynchronous view matrices,
 		// one at the beginning of display refresh,
@@ -467,7 +467,7 @@ public:
 		// TODO: Right now, this samples the latest pose published to the "pose" topic.
 		// However, this should really be polling the high-frequency pose prediction topic,
 		// given a specified timestamp!
-		const pose_type latest_pose = pp->get_fast_pose();
+		const pose_type latest_pose = pp->get_fast_pose().pose;
 		GetViewMatrixFromPose(&viewMatrixBegin, latest_pose);
 
 		// std::cout << "Timewarp: old " << most_recent_frame->render_pose.pose << ", new " << latest_pose->pose << std::endl;
@@ -585,7 +585,7 @@ public:
 				glGenFramebuffers(1, &fb);
 				glBindFramebuffer(GL_FRAMEBUFFER, fb);
 				char addr[50];
-				sprintf(addr, "./actual-new/eye/left/%ld_timestamp.ppm", ((GetNextSwapTimeEstimate() - startTime).count() / 1000));
+				sprintf(addr, "./ideal-new/eye/left/%ld_timestamp.ppm", ((GetNextSwapTimeEstimate() - startTime).count() / 1000));
 				FILE* out = fopen(addr, "wb");
 				
 				unsigned char* pixels = (unsigned char*)malloc(width * height * 3);
