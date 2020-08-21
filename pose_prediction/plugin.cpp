@@ -50,7 +50,7 @@ public:
 
     // future_time: Timestamp in the future in seconds
     bool has_initial_offset = false;
-    virtual pose_type get_fast_pose(time_type future_timestamp) override {
+    virtual fast_pose_type get_fast_pose(time_type future_timestamp) override {
 
         // Generates a dummy yaw-back-and-forth pose.
 
