@@ -30,13 +30,13 @@ SSIM = []
 perfectValue = [1] * len(testList)
 
 # Start getting the SSIM values
-for i in range(0, len(testList)):
+for i in range(0, len(testList), 100):
     # Load the test input images
     imageB = cv2.imread(testPath + testList[i])
     imageA = cv2.imread(groundTruthPath + groundTruthList[i])
 
-    # The commented part is when the file names are timestamps
-    # Retrieve the time of the test image
+    # # The commented part is when the file names are timestamps
+    # # Retrieve the time of the test image
     # numberB = []
     # for word in range(0, len(testList[i])):
     #     if testList[i][word].isdigit():
@@ -48,7 +48,7 @@ for i in range(0, len(testList)):
     
     # deltaT = 100000000.0
     # gtImage = groundTruthList[0]
-    # Find the proper file to compare from the ground-truth images
+    # # Find the proper file to compare from the ground-truth images
     # for j in range(0, len(groundTruthList)):
     #     numberA = []
     #     for word in range(0, len(groundTruthList[j])):
@@ -61,6 +61,7 @@ for i in range(0, len(testList)):
     #     if (abs(bInt - aInt) < deltaT):
     #         deltaT = abs(bInt - aInt)
     #         gtImage = groundTruthList[j]
+
     # imageA = cv2.imread(groundTruthPath + gtImage)
 
     # For debugging purpose

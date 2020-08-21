@@ -41,6 +41,7 @@ public:
     }
 
     // future_time: Timestamp in the future in seconds
+    bool has_initial_offset = false;
     virtual pose_type get_fast_pose(time_type future_timestamp) override {
 
         // Generates a dummy yaw-back-and-forth pose.
@@ -65,6 +66,11 @@ public:
             return correct_pose(
                 pose_ptr ? *pose_ptr : pose_type{}
             );
+        }
+        else if (!has_initial_offset) {
+            const pose_type* pose_ptr = _m_slow_pose->get_latest_ro();
+            set_offset(correct_pose(*pose_ptr).orientation);
+            has_initial_offset = true;
         }
         double dt = std::chrono::duration_cast<std::chrono::nanoseconds>(future_timestamp - std::chrono::system_clock::now()).count();
         Eigen::Matrix<double,13,1> state_plus = predict_mean_rk4(dt/NANO_SEC);
