@@ -47,7 +47,7 @@
    rm -rf metrics/
    ```
 
-7. Delete the first 300 images in both the `ideal` and the `actual` directories. On Jetson, you can change line 33 in `ssim.py` from `for i in range(0, len(testList)):` to `for i in range(300, len(testList)):`.
+7. Delete the first 300 images in both the `ideal` and the `actual` directories. On Jetson, you can change line 33 in `ssim.py` from `for i in range(0, min(len(testList), len(groundTruthList)):` to `for i in range(300, min(len(testList), len(groundTruthList)):`.
 
 8. Before editting `ssim.py`, you may need to install some modules.Use the following command:
 
