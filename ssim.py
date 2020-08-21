@@ -18,22 +18,25 @@ import numpy as np
 groundTruthPath = "ideal-api/"
 testPath = "actual-api/"
 
+# The path to store the SSIM images
+ssimPath = "ssim-api/"
+
 """
 The way to do the 1-to-1 comparison
 """
 # Get the lists of the files
-groundTruthList = os.listdir(groundTruthPath)
-testList = os.listdir(testPath)
+groundTruthList = sorted(os.listdir(groundTruthPath))
+testList = sorted(os.listdir(testPath))
 
 # A list to store the SSIM values and a list of perfect values
 SSIM = []
-perfectValue = [1] * len(testList)
+# perfectValue = [1] * len(testList)
 
 # Start getting the SSIM values
-for i in range(0, len(testList), 100):
+for i in range(0, len(testList)):
     # Load the test input images
-    imageB = cv2.imread(testPath + testList[i])
     imageA = cv2.imread(groundTruthPath + groundTruthList[i])
+    imageB = cv2.imread(testPath + testList[i])
 
     # # The commented part is when the file names are timestamps
     # # Retrieve the time of the test image
@@ -77,6 +80,8 @@ for i in range(0, len(testList), 100):
     # images, ensuring that the difference image is returned
     (score, diff) = compare_ssim(grayA, grayB, full=True)
     diff = (diff * 255).astype("uint8")
+
+    cv2.imwrite((ssimPath + testList[i]),diff)
 
     # Append the results
     SSIM.append(score)
