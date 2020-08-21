@@ -636,14 +636,14 @@ public:
 			// with the UV and position buffers correctly offset.
 			glDrawElements(GL_TRIANGLES, num_distortion_indices, GL_UNSIGNED_INT, (void*)0);
 
-			if (pp->fast_pose_reliable()) {
-				//unsigned char* pixels = (unsigned char*)malloc(SCREEN_WIDTH * SCREEN_HEIGHT * 3);
-				std::unique_ptr<cv::Mat> pixels = std::make_unique<cv::Mat>(SCREEN_HEIGHT, SCREEN_WIDTH, CV_8UC3);
-				glReadPixels(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, GL_RGB, GL_UNSIGNED_BYTE, pixels->ptr());
-				copy_thread.feed_image(image_type{
-					std::move(pixels), static_cast<size_t>((GetNextSwapTimeEstimate() - startTime).count() / 1000)
-				});
-			}
+			// if (pp->fast_pose_reliable()) {
+			// 	//unsigned char* pixels = (unsigned char*)malloc(SCREEN_WIDTH * SCREEN_HEIGHT * 3);
+			// 	std::unique_ptr<cv::Mat> pixels = std::make_unique<cv::Mat>(SCREEN_HEIGHT, SCREEN_WIDTH, CV_8UC3);
+			// 	glReadPixels(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, GL_RGB, GL_UNSIGNED_BYTE, pixels->ptr());
+			// 	copy_thread.feed_image(image_type{
+			// 		std::move(pixels), static_cast<size_t>((GetNextSwapTimeEstimate() - startTime).count() / 1000)
+			// 	});
+			// }
 
 			// The following loop is used to generate the images from the textures we obtained before
 			// if (eye == 0) {

@@ -15,8 +15,8 @@ import numpy as np
 # from math import sqrt
 
 # Incicate the path for the two folders
-groundTruthPath = "ideal/eye/left/"
-testPath = "actual/eye/left/"
+groundTruthPath = "ideal-api/"
+testPath = "actual-api/"
 
 """
 The way to do the 1-to-1 comparison
@@ -33,35 +33,38 @@ perfectValue = [1] * len(testList)
 for i in range(0, len(testList)):
     # Load the test input images
     imageB = cv2.imread(testPath + testList[i])
+    imageA = cv2.imread(groundTruthPath + groundTruthList[i])
+
+    # The commented part is when the file names are timestamps
     # Retrieve the time of the test image
-    numberB = []
-    for word in range(0, len(testList[i])):
-        if testList[i][word].isdigit():
-            numberB.append(int(testList[i][word]))
-    stringsB = [str(k) for k in numberB]
-    bString = "".join(stringsB)
-    bInt = int(bString)
+    # numberB = []
+    # for word in range(0, len(testList[i])):
+    #     if testList[i][word].isdigit():
+    #         numberB.append(int(testList[i][word]))
+    # stringsB = [str(k) for k in numberB]
+    # bString = "".join(stringsB)
+    # bInt = int(bString)
 
-    deltaT = 100000000.0
-    gtImage = groundTruthList[0]
+    
+    # deltaT = 100000000.0
+    # gtImage = groundTruthList[0]
     # Find the proper file to compare from the ground-truth images
-    for j in range(0, len(groundTruthList)):
-        numberA = []
-        for word in range(0, len(groundTruthList[j])):
-            if groundTruthList[j][word].isdigit():
-                numberA.append(int(groundTruthList[j][word]))
-        stringsA = [str(k) for k in numberA]
-        aString = "".join(stringsA)
-        aInt = int(aString)
+    # for j in range(0, len(groundTruthList)):
+    #     numberA = []
+    #     for word in range(0, len(groundTruthList[j])):
+    #         if groundTruthList[j][word].isdigit():
+    #             numberA.append(int(groundTruthList[j][word]))
+    #     stringsA = [str(k) for k in numberA]
+    #     aString = "".join(stringsA)
+    #     aInt = int(aString)
 
-        if (abs(bInt - aInt) < deltaT):
-            deltaT = abs(bInt - aInt)
-            gtImage = groundTruthList[j]
-
-    imageA = cv2.imread(groundTruthPath + gtImage)
+    #     if (abs(bInt - aInt) < deltaT):
+    #         deltaT = abs(bInt - aInt)
+    #         gtImage = groundTruthList[j]
+    # imageA = cv2.imread(groundTruthPath + gtImage)
 
     # For debugging purpose
-    print(testList[i] + ' ' + gtImage + '\n')
+    # print(testList[i] + ' ' + gtImage + '\n')
     # print(groundTruthPath + gtImage + '\n')
     # print(testPath + testList[i] + '\n')
 
