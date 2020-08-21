@@ -33,7 +33,7 @@ SSIM = []
 # perfectValue = [1] * len(testList)
 
 # Start getting the SSIM values
-for i in range(0, len(testList)):
+for i in range(0, min(len(testList), min(groundTruthList)):
     # Load the test input images
     imageA = cv2.imread(groundTruthPath + groundTruthList[i])
     imageB = cv2.imread(testPath + testList[i])
