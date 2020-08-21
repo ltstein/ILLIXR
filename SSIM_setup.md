@@ -63,6 +63,6 @@
    ```
 
 10. Go to the ILLIXR root directory and run `ssim.py`. You can ignore the warning. It's gonna take a few minutes to get the final results printed on screen.
-   ```
-   python3 ssim.py
-   ```
+    ```
+    python3 ssim.py
+    ```
