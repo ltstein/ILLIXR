@@ -104,20 +104,19 @@ public:
 
 		auto looked_up_pose = nearest_row->second;
 		looked_up_pose.sensor_time = _m_start_of_time + std::chrono::nanoseconds{nearest_row->first - dataset_first_time};
+        /// Where should this be used?
+
+		auto pose = gt_transform(nearest_row->second);
+
 		return fast_pose_type{
-			.pose = correct_pose(looked_up_pose),
+			.pose = pose,
 			.predict_computed_time = std::chrono::system_clock::now(),
 			.predict_target_time = time
 		};
-
 	}
-
 
 private:
 	const std::shared_ptr<switchboard> sb;
-
-	mutable Eigen::Quaternionf offset {Eigen::Quaternionf::Identity()};
-	mutable std::shared_mutex offset_mutex;
 
 	/*pyh: reusing data_loading from ground_truth_slam*/
 	const std::map<ullong, sensor_types> _m_sensor_data;

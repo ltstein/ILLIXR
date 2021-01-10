@@ -98,6 +98,7 @@ def load_native(config: Mapping[str, Any]) -> None:
     env_override = dict(
         ILLIXR_DATA=str(data_path),
         ILLIXR_DEMO_DATA=str(demo_data_path),
+        ILLIXR_RUN_DURATION=str(config["loader"].get("ILLIXR_RUN_DURATION", 60)),
         KIMERA_ROOT=config["action"]["kimera_path"],
     )
     env_list = [
