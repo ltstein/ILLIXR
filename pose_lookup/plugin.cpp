@@ -45,6 +45,36 @@ public:
     virtual bool true_pose_reliable() const override {
 		return false;
     }
+	virtual pose_type correct_pose(const pose_type pose) const override {
+		pose_type swapped_pose;
+
+		// This uses the OpenVINS standard output coordinate system.
+		// This is a mapping between the OV coordinate system and the OpenGL system.
+		swapped_pose.position.x() = -pose.position.y();
+		swapped_pose.position.y() = pose.position.z();
+		swapped_pose.position.z() = -pose.position.x();
+
+		// There is a slight issue with the orientations: basically,
+		// the output orientation acts as though the "top of the head" is the
+		// forward direction, and the "eye direction" is the up direction.
+		Eigen::Quaternionf raw_o (pose.orientation.w(), -pose.orientation.y(), pose.orientation.z(), -pose.orientation.x());
+
+		swapped_pose.orientation = apply_offset(raw_o);
+
+		return swapped_pose;
+	}
+
+    virtual void set_offset(const Eigen::Quaternionf& raw_o_times_offset) override{
+		std::unique_lock lock {offset_mutex};
+		Eigen::Quaternionf raw_o = raw_o_times_offset * offset.inverse();
+		//std::cout << "pose_prediction: set_offset" << std::endl;
+		offset = raw_o.inverse();
+    }
+
+    Eigen::Quaternionf apply_offset(const Eigen::Quaternionf& orientation) const {
+		std::shared_lock lock {offset_mutex};
+		return orientation * offset;
+    }
 
 	virtual Eigen::Quaternionf get_offset() override {
         return offset;
@@ -104,22 +134,24 @@ public:
 
 		auto looked_up_pose = nearest_row->second;
 		looked_up_pose.sensor_time = _m_start_of_time + std::chrono::nanoseconds{nearest_row->first - dataset_first_time};
-        /// Where should this be used?
-
-		auto pose = gt_transform(nearest_row->second);
-
 		return fast_pose_type{
-			.pose = pose,
+			.pose = correct_pose(looked_up_pose),
 			.predict_computed_time = std::chrono::system_clock::now(),
 			.predict_target_time = time
 		};
+
 	}
+
 
 private:
 	const std::shared_ptr<switchboard> sb;
 
+	mutable Eigen::Quaternionf offset {Eigen::Quaternionf::Identity()};
+	mutable std::shared_mutex offset_mutex;
+
 	/*pyh: reusing data_loading from ground_truth_slam*/
 	const std::map<ullong, sensor_types> _m_sensor_data;
+	std::map<ullong, sensor_types>::const_iterator _m_sensor_data_it;
 	ullong dataset_first_time;
 	time_type _m_start_of_time;
 	std::unique_ptr<reader_latest<time_type>> _m_vsync_estimate;
