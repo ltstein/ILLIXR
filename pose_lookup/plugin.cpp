@@ -45,6 +45,11 @@ public:
     virtual bool true_pose_reliable() const override {
 		return false;
     }
+
+	virtual Eigen::Quaternionf get_offset() override {
+        return offset;
+    }
+
 	virtual pose_type correct_pose(const pose_type pose) const override {
 		pose_type swapped_pose;
 
@@ -151,7 +156,6 @@ private:
 
 	/*pyh: reusing data_loading from ground_truth_slam*/
 	const std::map<ullong, sensor_types> _m_sensor_data;
-	std::map<ullong, sensor_types>::const_iterator _m_sensor_data_it;
 	ullong dataset_first_time;
 	time_type _m_start_of_time;
 	std::unique_ptr<reader_latest<time_type>> _m_vsync_estimate;
