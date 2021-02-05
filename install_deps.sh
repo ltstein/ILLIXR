@@ -86,7 +86,7 @@ then
 		. ./scripts/install_apt_deps.sh
 	fi
 
-	if [ ! -d "${temp_dir}/opencv" ] && y_or_n "Next: Install OpenCV from source"; then
+	if y_or_n "Next: Install OpenCV from source"; then
 		. ./scripts/install_opencv.sh
 	fi
 
