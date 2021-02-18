@@ -36,6 +36,15 @@ const record_header mtp_record {"mtp_record", {
 }};
 
 
+/**
+ * @brief Callback function to handle glfw errors
+ */
+static void error_callback(int error, const char* description)
+{
+    std::cerr << "|| glfw error_callback: " << error << std::endl
+              << "|>" << description << std::endl;
+}
+
 class timewarp_gl : public threadloop {
 
 public:
@@ -383,7 +392,9 @@ public:
 	}
 
 	virtual void _p_one_iteration() override {
+	    assert(errno == 0 && "Errno should not be set at start of iteration");
 		warp(glfwGetTime());
+		RAC_ERRNO_MSG("timewarl_gl after warp");
 	}
 
 	virtual void _p_thread_setup() override {
@@ -398,7 +409,10 @@ public:
 		if(!glfwInit()){
 			printf("Failed to initialize glfw\n");
 		}
-		errno = 0;
+		RAC_ERRNO_MSG("timewarp_gl after glfwInit");
+
+        /// Registering error callback for additional debug infp
+		glfwSetErrorCallback(error_callback);
 
     	// Construct timewarp meshes and other data
     	BuildTimewarp(&hmd_info);
@@ -409,12 +423,14 @@ public:
 			std::cerr << "glXMakeCurrent returned false in " << __FILE__ << ":" << __LINE__ << std::endl;
 			exit(1);
 		}
-		errno = 0;
+		RAC_ERRNO_MSG("timewarp_gl after glXMakeCurrent");
 
 		// set swap interval for 1
 		glXSwapIntervalEXTProc glXSwapIntervalEXT = 0;		
 		glXSwapIntervalEXT = (glXSwapIntervalEXTProc) glXGetProcAddressARB((const GLubyte *)"glXSwapIntervalEXT");		
 		glXSwapIntervalEXT(xwin->dpy, xwin->win, 1);
+
+		RAC_ERRNO_MSG("timewarp_gl after vsync swap interval set");
 
 		// Init and verify GLEW
 		assert(errno == 0);
@@ -424,7 +440,7 @@ public:
 			// clean up ?
 			exit(0);
 		}
-		errno = 0;
+		RAC_ERRNO();
 
 		glEnable              ( GL_DEBUG_OUTPUT );
 		glDebugMessageCallback( MessageCallback, 0 );
@@ -504,7 +520,7 @@ public:
 			std::cerr << "glXMakeCurrent returned false in " << __FILE__ << ":" << __LINE__ << std::endl;
 			exit(1);
 		}
-		errno = 0;
+		RAC_ERRNO();
 	}
 
 	virtual void warp([[maybe_unused]] float time) {
@@ -513,7 +529,7 @@ public:
 			std::cerr << "glXMakeCurrent returned false in " << __FILE__ << ":" << __LINE__ << std::endl;
 			exit(1);
 		}
-		errno = 0;
+		RAC_ERRNO();
 
 		glBindFramebuffer(GL_FRAMEBUFFER,0);
 		glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -663,6 +679,8 @@ public:
 
 		glXSwapBuffers(xwin->dpy, xwin->win);
 
+		RAC_ERRNO_MSG("timewarp_gl after glXSwapBuffers");
+
 		// The swap time needs to be obtained and published as soon as possible
 		lastSwapTime = std::chrono::high_resolution_clock::now();
 		[[maybe_unused]] auto afterSwap = glfwGetTime();
@@ -749,7 +767,7 @@ public:
 			std::cerr << "glXMakeCurrent returned false in " << __FILE__ << ":" << __LINE__ << std::endl;
 			exit(1);
 		}
-		errno = 0;
+		RAC_ERRNO();
 
  		glXDestroyContext(xwin->dpy, xwin->glc);
  		XDestroyWindow(xwin->dpy, xwin->win);
