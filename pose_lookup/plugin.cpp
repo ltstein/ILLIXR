@@ -27,13 +27,13 @@ public:
     virtual fast_pose_type get_fast_pose() const override {
 		switchboard::ptr<const switchboard::event_wrapper<time_type>> estimated_vsync = _m_vsync_estimate.get_ro_nullable();
 		time_type vsync;
-		if(estimated_vsync == nullptr) {
+		if (estimated_vsync == nullptr) {
 			std::cerr << "Vsync estimation not valid yet, returning fast_pose for now()" << std::endl;
 			vsync = std::chrono::system_clock::now();
 		} else {
 			vsync = *estimated_vsync;
 		}
-		return vsync;
+		return get_fast_pose(vsync);
     }
 
     virtual pose_type get_true_pose() const override {
@@ -139,6 +139,7 @@ private:
 
 	/*pyh: reusing data_loading from ground_truth_slam*/
 	const std::map<ullong, sensor_types> _m_sensor_data;
+    std::map<ullong, sensor_types>::const_iterator _m_sensor_data_it;
 	ullong dataset_first_time;
 	time_type _m_start_of_time;
 	switchboard::reader<switchboard::event_wrapper<time_type>> _m_vsync_estimate;
