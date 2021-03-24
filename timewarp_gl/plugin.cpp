@@ -53,7 +53,7 @@ public:
 		, _m_vsync_estimate{sb->get_writer<switchboard::event_wrapper<time_type>>("vsync_estimate")}
 		, _m_mtp{sb->get_writer<switchboard::event_wrapper<std::chrono::duration<double, std::nano>>>("mtp")}
 		, _m_frame_age{sb->get_writer<switchboard::event_wrapper<std::chrono::duration<double, std::nano>>>("warp_frame_age")}
-		, _m_offload_data{sb->publish<texture_pose>("texture_pose")}
+		, _m_offload_data{sb->get_writer<texture_pose>("texture_pose")}
 		, timewarp_gpu_logger{record_logger_}
 		, mtp_logger{record_logger_}
 		  // TODO: Use #198 to configure this. Delete getenv_or.
@@ -101,7 +101,7 @@ private:
 	switchboard::writer<switchboard::event_wrapper<std::chrono::duration<double, std::nano>>> _m_frame_age;
 
 	// Switchboard plug for publishing offloaded data
-	std::unique_ptr<writer<texture_pose>> _m_offload_data;
+    switchboard::writer<texture_pose> _m_offload_data;
 
 	record_coalescer timewarp_gpu_logger;
 	record_coalescer mtp_logger;
@@ -673,16 +673,18 @@ public:
 			GLubyte* image = readTextureImage();
 
 			// Publish image and pose
-			auto offload_data = new texture_pose;
-			offload_data->seq = ++_offload_seq;
-			offload_data->image = image;
-			offload_data->pose_time = lastSwapTime;
-			offload_data->offload_time = offload_time;
-			offload_data->position = latest_pose.pose.position;
-			offload_data->latest_quaternion = latest_pose.pose.orientation;
-			offload_data->render_quaternion = most_recent_frame->render_pose.pose.orientation;
-
-			_m_offload_data->put(offload_data);
+            switchboard::ptr<texture_pose> datum_texture_pose = _m_offload_data.allocate<texture_pose>(
+                texture_pose{
+                    static_cast<int>(++_offload_seq), /// TODO: Should texture_pose.seq be a long long too?
+                    offload_time,
+                    image,
+                    lastSwapTime,
+                    latest_pose.pose.position,
+                    latest_pose.pose.orientation,
+                    most_recent_frame->render_pose.pose.orientation
+                }
+            );
+		    _m_offload_data.put(std::move(datum_texture_pose));
 		}
 
 #ifndef NDEBUG
