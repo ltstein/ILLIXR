@@ -62,6 +62,7 @@ public:
 	}
 
 	void _p_one_iteration() override {
+		assert(0);
 		const imu_cam_type *datum = _m_imu_cam->get_latest_ro();
 		double timestamp_in_seconds = std::chrono::duration<double, std::chrono::seconds::period>{datum->dataset_time}.count();
 

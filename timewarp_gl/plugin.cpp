@@ -569,7 +569,7 @@ public:
 
 		glBindVertexArray(tw_vao);
 
-		auto gpu_start_wall_time = std::chrono::system_clock::now();
+		auto gpu_start_wall_time = _m_clock->now();
 
 		GLuint query;
 		GLuint64 elapsed_time = 0;
